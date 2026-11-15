@@ -1,4 +1,4 @@
-"""Measure where the recogniser's CTC emissions sit inside a phone. Cloud only.
+"""Measure where the recogniser's CTC emissions sit inside a phone.
 
 For phone transitions that must flip the pitch tracker's voicing (vowel ->
 voiceless consonant, voiceless consonant -> vowel), compare the time of the
@@ -22,7 +22,7 @@ from mini_voz.align import ALIGNER_RATE, ALIGNER_STRIDE, PhoneRecognizer, token_
 from mini_voz.config import Config
 from mini_voz.text import PHONE_SET, VOWEL_SET, phonemize
 
-FRICATIVES, STOPS = {"f", "θ", "s", "ʃ"}, {"p", "t", "k"}
+FRICATIVES, STOPS = {"f", "θ", "s", "x", "ʃ"}, {"p", "t", "k"}
 
 
 def main():
@@ -30,7 +30,7 @@ def main():
     parser.add_argument("--features", type=Path, required=True)
     parser.add_argument("--split", default="validation")
     parser.add_argument("--count", type=int, default=300)
-    parser.add_argument("--device", default="cuda")
+    parser.add_argument("--device", default="cpu")
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     c = Config()

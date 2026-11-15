@@ -23,12 +23,12 @@ from mini_voz.infer import load_model
 from mini_voz.text import phonemize
 
 SENTENCES = (
-    "Hello! This is mini voz.",
-    "The weather is nice today, and I feel very relaxed.",
-    "Did you really pay $42.50 for that on March 3rd, 2024?",
-    "She sells seashells by the seashore; the shells she sells are surely seashells.",
-    "After a long and difficult journey across the mountains, the travellers finally reached the small village, "
-    "where they were welcomed with warm food, a place to sleep and many questions about the road behind them.",
+    "¡Hola! Esto es mini voz.",
+    "Hoy hace buen tiempo, y me siento muy tranquilo.",
+    "¿De verdad pagaste 42,50 euros por eso el 3 de marzo de 2024?",
+    "Tres tristes tigres tragaban trigo en un trigal; el perro de San Roque no tiene rabo.",
+    "Después de un viaje largo y difícil por las montañas, los viajeros llegaron por fin al pequeño pueblo, "
+    "donde los recibieron con comida caliente, un lugar para dormir y muchas preguntas sobre el camino recorrido.",
 )
 
 

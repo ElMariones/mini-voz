@@ -1,14 +1,22 @@
-"""Generate a new batch of two-voice recordings with the teacher TTS. Cloud only.
+"""Generate the training recordings with a teacher TTS (Qwen3-TTS). Needs an NVIDIA GPU.
 
-Same recipe as the first batch (release/worker.py in the dataset repository):
-Qwen3-TTS 1.7B Base cloning the two approved VoiceDesign references, batches of
-eight, Whisper small.en screening at 15% normalized WER, one retry, peak
-normalisation to 0.95. Differences: scripts come from a local JSONL, nothing is
-uploaded from here (no token on the machine), and it stops at a budget deadline.
+Qwen3-TTS 1.7B Base clones one short reference clip per voice and reads every
+script with it. Each clip is screened with Whisper (multilingual "small",
+Spanish) and rejected above 15% word error rate, retried once, and peak
+normalised to 0.95.
+
+    python scripts/generate_audio.py --scripts data/scripts.jsonl --voices voices/voices.json --root data
+
+``voices.json`` names the voices and their reference clips (paths relative to
+the file), as written by ``scripts/design_voice.py`` or by hand:
+
+    {"F1": {"audio": "F1.wav", "text": "What the reference clip says."},
+     "M1": {"audio": "M1.wav", "text": "..."}}
 
 Resumable: every clip is recorded in a SQLite file; rerun the same command.
-Output: <root>/audio/<id>.flac and <root>/manifest.jsonl (accepted clips, in the
-JSONL form mini_voz.prepare reads), <root>/review.jsonl (rejected clips).
+Create a file named STOP in ``--root`` to pause cleanly.
+Output: <root>/audio/<id>.flac and <root>/{train,validation,test}.jsonl (accepted
+clips, in the form mini_voz.prepare reads), <root>/review.jsonl (rejected clips).
 """
 
 import argparse
@@ -30,8 +38,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--scripts", type=Path, required=True)
     parser.add_argument("--root", type=Path, required=True)
-    parser.add_argument("--references", type=Path, required=True, help="Directory with F2.wav, M2.wav")
-    parser.add_argument("--voices", type=Path, required=True, help="voices.json of the first batch")
+    parser.add_argument("--voices", type=Path, required=True, help="voices.json: reference clip and its text for every voice")
     parser.add_argument("--deadline-file", type=Path)
     parser.add_argument("--deadline-margin", type=float, default=600)
     parser.add_argument("--limit", type=int, help="Only the first N scripts (smoke test)")
@@ -41,7 +48,7 @@ def main():
     from jiwer import wer
     from qwen_tts import Qwen3TTSModel
     from scipy.signal import resample_poly
-    from transformers.models.whisper.english_normalizer import EnglishTextNormalizer
+    import re
     audio = args.root / "audio"
     audio.mkdir(parents=True, exist_ok=True)
     db = sqlite3.connect(args.root / "state.sqlite")
@@ -49,8 +56,8 @@ def main():
     db.commit()
     rows = [json.loads(line) for line in args.scripts.read_text(encoding="utf-8").splitlines() if line.strip()]
     rows = sorted(rows, key=lambda r: (r["character_count"], r["id"]))[:args.limit]
-    jobs = [{"id": f"{row['id']}_{voice}", "voice": voice, "row": row} for row in rows for voice in ("F2", "M2")]
     references = json.loads(args.voices.read_text(encoding="utf-8"))
+    jobs = [{"id": f"{row['id']}_{voice}", "voice": voice, "row": row} for row in rows for voice in references]
     started = time.time()
 
     def out_of_time():
@@ -75,10 +82,13 @@ def main():
 
     torch.set_num_threads(6)
     model = Qwen3TTSModel.from_pretrained(MODEL, device_map="cuda:0", dtype=torch.bfloat16, attn_implementation="sdpa")
-    prompts = {v: model.create_voice_clone_prompt(ref_audio=str(args.references / f"{v}.wav"), ref_text=references[v]["text"],
-                                                  x_vector_only_mode=False)[0] for v in ("F2", "M2")}
-    asr = WhisperModel("small.en", device="cpu", compute_type="int8", cpu_threads=6)
-    normalize = EnglishTextNormalizer({"cancelled": "canceled", "colour": "color", "favourite": "favorite", "centre": "center"})
+    prompts = {v: model.create_voice_clone_prompt(ref_audio=str(args.voices.parent / references[v]["audio"]), ref_text=references[v]["text"],
+                                                  x_vector_only_mode=False)[0] for v in references}
+    asr = WhisperModel("small", device="cpu", compute_type="int8", cpu_threads=6)
+
+    def normalize(text):
+        """Lower case, no punctuation; accents and ñ are letters and stay."""
+        return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9áéíóúüñ ]", " ", text.lower())).strip()
     pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
     futures = []
 
@@ -97,7 +107,7 @@ def main():
                 reasons.append("excessive_silence")
             transcript, error = "", 1.0
             if not reasons:
-                segments, _ = asr.transcribe(resample_poly(w.astype("float32"), 2, 3), language="en", beam_size=3, condition_on_previous_text=False)
+                segments, _ = asr.transcribe(resample_poly(w.astype("float32"), 2, 3), language="es", beam_size=3, condition_on_previous_text=False)
                 transcript = " ".join(s.text.strip() for s in segments)
                 error = wer(normalize(row["text"]), normalize(transcript) or "<empty>")
                 if error > 0.15:
@@ -107,7 +117,7 @@ def main():
             payload = {"id": job["id"], "text_id": row["id"], "voice_id": job["voice"], "text": row["text"], "split": row["split"],
                        "category": row["category"], "origin": row["origin"], "source_id": row["source_id"],
                        "source_license": row["source_license"], "source_url": row["source_url"], "teacher_model": MODEL,
-                       "reference_audio": job["voice"] + ".wav", "audio": f"audio/{job['id']}.flac", "duration_seconds": round(duration, 3),
+                       "reference_audio": references[job["voice"]]["audio"], "audio": f"audio/{job['id']}.flac", "duration_seconds": round(duration, 3),
                        "generation_seed": seed, "generation_batch": batch_id, "attempt": attempt, "generation_seconds": seconds,
                        "asr_transcript": transcript, "normalized_wer": round(float(error), 4), "review_reasons": reasons}
             records.append((job["id"], "review" if reasons else "accepted", attempt, json.dumps(payload)))
@@ -124,7 +134,7 @@ def main():
         torch.manual_seed(seed)
         start = time.time()
         try:
-            waves, rate = model.generate_voice_clone(text=[j["row"]["text"] for j in batch], language=["English"] * len(batch),
+            waves, rate = model.generate_voice_clone(text=[j["row"]["text"] for j in batch], language=["Spanish"] * len(batch),
                                                      voice_clone_prompt=[prompts[j["voice"]] for j in batch], max_new_tokens=600)
         except torch.cuda.OutOfMemoryError:
             torch.cuda.empty_cache()
@@ -157,7 +167,9 @@ def main():
             break
     pool.shutdown(wait=True)
     accepted = [json.loads(p) for (p,) in db.execute("SELECT payload FROM clips WHERE status='accepted' ORDER BY id")]
-    (args.root / "manifest.jsonl").write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in accepted), encoding="utf-8")
+    for split in ("train", "validation", "test"):
+        (args.root / (split + ".jsonl")).write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in accepted if r["split"] == split),
+                                                    encoding="utf-8", newline="\n")
     (args.root / "review.jsonl").write_text("".join(p + "\n" for (p,) in db.execute("SELECT payload FROM clips WHERE status!='accepted' ORDER BY id")), encoding="utf-8")
     report("paused" if stopped else "complete")
 
