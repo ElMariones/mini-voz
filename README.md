@@ -1,9 +1,9 @@
-# tiny-voca
+# mini-voz
 
-tiny-voca is a small English text-to-speech model. It has two voices, 4.5M
+mini-voz is a small English text-to-speech model. It has two voices, 4.5M
 parameters, and runs on a CPU or in the browser.
 
-[Demo](https://tiny-voca.n4ze3m.com) · [Weights](https://huggingface.co/n4ze3m/tiny-voca) · [Dataset](https://huggingface.co/datasets/n4ze3m/tiny-voca)
+[Demo](https://mini-voz.n4ze3m.com) · [Weights](https://huggingface.co/n4ze3m/mini-voz) · [Dataset](https://huggingface.co/datasets/n4ze3m/mini-voz)
 
 ## Features
 
@@ -16,20 +16,20 @@ parameters, and runs on a CPU or in the browser.
 ## Install
 
 ```bash
-git clone https://github.com/n4ze3m/tiny-voca.git
-cd tiny-voca
+git clone https://github.com/n4ze3m/mini-voz.git
+cd mini-voz
 pip install -e ".[own]"
-hf download n4ze3m/tiny-voca --local-dir weights
+hf download n4ze3m/mini-voz --local-dir weights
 export DIZIONE_DATA=weights/phonemizer
 ```
 
 ## Usage
 
 ```bash
-python -m tiny_voca.infer \
-  --checkpoint weights/tiny-voca.pt \
+python -m mini_voz.infer \
+  --checkpoint weights/mini-voz.pt \
   --voice F2 \
-  --text "Hello! This is tiny voca." \
+  --text "Hello! This is mini voz." \
   --output hello.wav
 ```
 
@@ -45,20 +45,20 @@ Long text is fine. It is read one sentence at a time and the audio is joined.
 A text that ends without a mark gets a full stop, so the last word does not
 break off. A sentence with nothing to read, such as one in another script, is
 skipped. The output never peaks above 0.99, so it does not clip as a 16-bit
-WAV. In Python, `tiny_voca.infer.speak_text` does the same.
+WAV. In Python, `mini_voz.infer.speak_text` does the same.
 
 ## ONNX
 
 ```bash
-python -m tiny_voca.export --checkpoint weights/tiny-voca.pt --output tiny-voca.onnx
+python -m mini_voz.export --checkpoint weights/mini-voz.pt --output mini-voz.onnx
 ```
 
 A ready file is in the weights repository as `onnx/model.onnx`. The
-[model card](https://huggingface.co/n4ze3m/tiny-voca) shows how to call it.
+[model card](https://huggingface.co/n4ze3m/mini-voz) shows how to call it.
 
 ## Web demo
 
-The [demo](https://tiny-voca.n4ze3m.com) runs the model in the browser. It
+The [demo](https://mini-voz.n4ze3m.com) runs the model in the browser. It
 plays each sentence as soon as it is made, and keeps the whole clip in the
 player. Its source is in `web/`.
 
@@ -71,12 +71,12 @@ npx wrangler dev
 ## Training
 
 ```bash
-export TINY_VOCA_FRONTEND=own
-python -m tiny_voca.prepare --inputs data/train-*.parquet --split train --output features
-python -m tiny_voca.annotate --features features --output annotations
-python -m tiny_voca.train --train annotations/train.jsonl --validation annotations/validation.jsonl \
+export MINI_VOZ_FRONTEND=own
+python -m mini_voz.prepare --inputs data/train-*.parquet --split train --output features
+python -m mini_voz.annotate --features features --output annotations
+python -m mini_voz.train --train annotations/train.jsonl --validation annotations/validation.jsonl \
   --output runs/NAME --steps 104000 --gan-start 8000 --gan-ratio 0.7 --teacher-final 0
-python -m tiny_voca.evaluate --checkpoint runs/NAME/inference.pt --annotations annotations --output eval/NAME
+python -m mini_voz.evaluate --checkpoint runs/NAME/inference.pt --annotations annotations --output eval/NAME
 ```
 
 The released weights took 7.7 hours on one RTX 4090. More about the model and
@@ -116,8 +116,8 @@ Apache-2.0 for code and weights. CC BY 4.0 for the dataset.
 ```bibtex
 @software{nazeem2026tinyvoca,
   author = {Nazeem, Muhammed},
-  title  = {tiny-voca: a 4.5M-parameter two-voice English text-to-speech model},
+  title  = {mini-voz: a 4.5M-parameter two-voice English text-to-speech model},
   year   = {2026},
-  url    = {https://huggingface.co/n4ze3m/tiny-voca}
+  url    = {https://huggingface.co/n4ze3m/mini-voz}
 }
 ```

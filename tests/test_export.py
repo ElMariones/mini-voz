@@ -5,15 +5,15 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from tiny_voca.config import Config
-from tiny_voca.export import Exportable, export
-from tiny_voca.model import TinyVoca
-from tiny_voca.text import PHONE_IDS
+from mini_voz.config import Config
+from mini_voz.export import Exportable, export
+from mini_voz.model import MiniVoz
+from mini_voz.text import PHONE_IDS
 
 
 def small_model():
     torch.manual_seed(0)
-    model = TinyVoca(Config()).eval()
+    model = MiniVoz(Config()).eval()
     # A fresh model predicts arbitrary durations; pin them to a few frames per token.
     torch.nn.init.zeros_(model.duration.out.weight)
     model.duration.out.bias.data[:] = torch.tensor([1.5, 1.0])

@@ -1,9 +1,9 @@
-"""From-scratch training on validated durations. Running this starts paid compute.
+"""From-scratch training on validated durations.
 
 There is no learned aligner and no alignment loss: token durations come from
 the annotation layer and must cover the acoustic frames exactly. The waveform
 discriminators and the auxiliary mel head are training-only. No model or data
-downloads and no infrastructure management happen here.
+downloads happen here.
 """
 
 import argparse
@@ -18,8 +18,12 @@ from torch import nn
 from torch.nn import functional as F
 from .config import CHECKPOINT_FORMAT, Config
 from .data import AnnotatedDataset, BucketSampler, collate
+from .device import is_cuda, pick_device
+from .device import is_cuda, pick_device
+from .device import is_cuda, pick_device
+from .device import is_cuda, pick_device
 from .losses import Discriminators, SpectralLoss, discriminator_loss, generator_gan_loss, masked_mean
-from .model import TinyVoca
+from .model import MiniVoz
 from .text import frontend_fingerprint, frontend_identity
 
 WEIGHTS = {"duration": 1.0, "pause": 1.0, "pitch": 2.0, "pitch_spread": 2.0, "voicing": 1.0, "energy": 1.0, "mel_head": 2.0,
@@ -37,7 +41,7 @@ def masked_std(value, mask):
 class TrainingSystem(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.model = TinyVoca(config)
+        self.model = MiniVoz(config)
         self.mel_head = nn.Linear(config.channels, config.n_mels)   # auxiliary, not exported
         self.spectral = SpectralLoss(config.sample_rate)
 
@@ -270,7 +274,7 @@ def main():
     parser.add_argument("--validation", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--config", type=Path)
-    parser.add_argument("--device", default="cuda")
+    parser.add_argument("--device", default="auto", help="auto, cuda, mps or cpu")
     parser.add_argument("--steps", type=int, default=100000)
     parser.add_argument("--batch-frames", type=int, default=9000, help="Padded acoustic frames per batch")
     parser.add_argument("--max-batch", type=int, default=32)
@@ -296,8 +300,9 @@ def main():
     parser.add_argument("--keep-every", type=int, default=10000, help="Keep a numbered checkpoint at this interval and at the GAN boundary")
     parser.add_argument("--log-every", type=int, default=10)
     parser.add_argument("--seed", type=int, default=20261113)
-    parser.add_argument("--max-seconds", type=float, default=3600, help="Wall-time cap per invocation; save and exit at a step boundary")
-    parser.add_argument("--deadline-file", type=Path, help="Budget JSON with an absolute 'deadline'; training saves and exits before it")
+    parser.add_argument("--max-seconds", type=float, default=math.inf, help="Stop after this many seconds: save and exit at a step "
+                        "boundary, continue later with --resume (default: no limit)")
+    parser.add_argument("--deadline-file", type=Path, help="JSON with an absolute 'deadline' (Unix time); training saves and exits before it")
     parser.add_argument("--deadline-margin", type=float, default=300)
     parser.add_argument("--resume", type=Path, help="Continue the same run exactly (same recipe, data and configuration)")
     parser.add_argument("--init-from", type=Path, help="Start a NEW run from another run's checkpoint with a changed recipe: "
@@ -309,6 +314,7 @@ def main():
                         "without marking vowel frames voiced")
     parser.add_argument("--no-preload", action="store_true", help="Load feature files lazily instead of before the first step")
     args = parser.parse_args()
+    args.device = pick_device(args.device)
     if min(args.steps, args.batch_frames, args.max_batch, args.save_every, args.keep_every, args.log_every, args.crops, args.gan_ramp) < 1:
         parser.error("steps, batch limits and intervals must be positive")
     if args.max_seconds <= 0 or args.learning_rate <= 0 or args.lr_half_life <= 0 or not 0 <= args.teacher_final <= 1:
@@ -321,19 +327,19 @@ def main():
     # The budget file is re-read while training so a deliberate extension (or cut) takes effect.
     budget = {"deadline": math.inf, "checked": time.time()}
     if args.deadline_file:
-        budget["deadline"] = float(json.loads(args.deadline_file.read_text())["deadline"]) - args.deadline_margin
+        budget["deadline"] = float(json.loads(args.deadline_file.read_text(encoding="utf-8"))["deadline"]) - args.deadline_margin
 
     def deadline():
         if args.deadline_file and time.time() - budget["checked"] > 30:
             budget["checked"] = time.time()
             try:
-                budget["deadline"] = float(json.loads(args.deadline_file.read_text())["deadline"]) - args.deadline_margin
+                budget["deadline"] = float(json.loads(args.deadline_file.read_text(encoding="utf-8"))["deadline"]) - args.deadline_margin
             except (OSError, ValueError, KeyError):
                 pass    # keep the last valid deadline while the file is being rewritten
         return budget["deadline"]
     if time.time() >= deadline():
-        raise SystemExit("the cloud budget deadline has passed (or is too close); not starting")
-    c = Config.from_dict(json.loads(args.config.read_text())) if args.config else Config()
+        raise SystemExit("the deadline has passed (or is too close); not starting")
+    c = Config.from_dict(json.loads(args.config.read_text(encoding="utf-8"))) if args.config else Config()
     torch.manual_seed(args.seed)
     torch.backends.cuda.matmul.allow_tf32 = True
     torch.backends.cudnn.allow_tf32 = True
@@ -386,7 +392,7 @@ def main():
         critic_optimizer.load_state_dict(state["critic_optimizer"])
         sampler.load_state(state["sampler"])
         torch.set_rng_state(state["torch_rng"].cpu())
-        if str(args.device).startswith("cuda") and state["cuda_rng"] is not None:
+        if is_cuda(args.device) and state["cuda_rng"] is not None:
             torch.cuda.set_rng_state_all([x.cpu() for x in state["cuda_rng"]])
         step = state["step"]
     elif args.init_from:
@@ -412,10 +418,10 @@ def main():
     if step >= args.steps:
         raise ValueError("checkpoint already reached requested total steps")
     args.output.mkdir(parents=True, exist_ok=True)
-    (args.output / "config.json").write_text(json.dumps(c.to_dict(), indent=2) + "\n")
+    (args.output / "config.json").write_text(json.dumps(c.to_dict(), indent=2) + "\n", encoding="utf-8")
     (args.output / "recipe.json").write_text(json.dumps({**recipe, "annotation": train.annotation, "frontend": frontend_fingerprint(),
-                                                         "train_utterances": len(pool), "datasets": fingerprints}, indent=2) + "\n")
-    print(json.dumps({"inference_parameters": count, "training_only_parameters": sum(p.numel() for p in system.mel_head.parameters())
+                                                         "train_utterances": len(pool), "datasets": fingerprints}, indent=2) + "\n", encoding="utf-8")
+    print(json.dumps({"device": str(args.device), "inference_parameters": count, "training_only_parameters": sum(p.numel() for p in system.mel_head.parameters())
                       + sum(p.numel() for p in critics.parameters()), "train_utterances": len(pool), "start_step": step,
                       "branched": bool(args.init_from), "resumed": bool(args.resume)}), flush=True)
     start = time.monotonic()
@@ -425,7 +431,7 @@ def main():
         return {"format_version": CHECKPOINT_FORMAT, "config": c.to_dict(), "frontend": frontend_fingerprint(), "annotation": train.annotation,
                 "step": step, "datasets": fingerprints, "recipe": recipe, "system": system.state_dict(), "critics": critics.state_dict(),
                 "optimizer": optimizer.state_dict(), "critic_optimizer": critic_optimizer.state_dict(), "sampler": sampler.state(),
-                "torch_rng": torch.get_rng_state(), "cuda_rng": torch.cuda.get_rng_state_all() if str(args.device).startswith("cuda") else None}
+                "torch_rng": torch.get_rng_state(), "cuda_rng": torch.cuda.get_rng_state_all() if is_cuda(args.device) else None}
     if step == args.gan_start and not args.resume:
         atomic_save(snapshot(), args.output / f"step-{step:08d}.pt")
     window, window_steps, window_start = defaultdict(float), 0, time.monotonic()
@@ -442,8 +448,10 @@ def main():
         retain = step == args.gan_start or step % args.keep_every == 0
         save = step % args.save_every == 0 or should_stop or retain
         if step % args.log_every == 0 or save:
-            if str(args.device).startswith("cuda"):
+            if is_cuda(args.device):
                 torch.cuda.synchronize()
+            elif str(args.device) == "mps":
+                torch.mps.synchronize()
             seconds = time.monotonic() - window_start
             record = {key: (value if key in ("frames", "utterances") else value / window_steps) for key, value in window.items()}
             record.update(step=step, elapsed_seconds=elapsed, steps_per_second=window_steps / max(seconds, 1e-9),
@@ -456,7 +464,7 @@ def main():
                 export_model(system.model, args.output / "inference.pt", step, train.annotation)
                 if retain:
                     atomic_save(state, args.output / f"step-{step:08d}.pt")
-            with (args.output / "metrics.jsonl").open("a") as stream:
+            with (args.output / "metrics.jsonl").open("a", encoding="utf-8") as stream:
                 stream.write(json.dumps(record) + "\n")
             print(json.dumps(record), flush=True)
             window, window_steps, window_start = defaultdict(float), 0, time.monotonic()

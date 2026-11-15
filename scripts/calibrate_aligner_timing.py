@@ -18,9 +18,9 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from tiny_voca.align import ALIGNER_RATE, ALIGNER_STRIDE, PhoneRecognizer, token_spans
-from tiny_voca.config import Config
-from tiny_voca.text import PHONE_SET, VOWEL_SET, phonemize
+from mini_voz.align import ALIGNER_RATE, ALIGNER_STRIDE, PhoneRecognizer, token_spans
+from mini_voz.config import Config
+from mini_voz.text import PHONE_SET, VOWEL_SET, phonemize
 
 FRICATIVES, STOPS = {"f", "θ", "s", "ʃ"}, {"p", "t", "k"}
 
@@ -79,7 +79,7 @@ def main():
     print(json.dumps(report, indent=2))
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(json.dumps(report, indent=2) + "\n")
+        args.output.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
 
 
 if __name__ == "__main__":

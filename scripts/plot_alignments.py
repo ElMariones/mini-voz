@@ -11,10 +11,10 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from tiny_voca.align import frame_energy_db
-from tiny_voca.config import Config
-from tiny_voca.data import continuous_pitch
-from tiny_voca.text import PHONE_SET
+from mini_voz.align import frame_energy_db
+from mini_voz.config import Config
+from mini_voz.data import continuous_pitch
+from mini_voz.text import PHONE_SET
 
 
 def main():
@@ -29,7 +29,7 @@ def main():
     import matplotlib.pyplot as plt
     c = Config()
     rows = [json.loads(line) for line in (args.annotations / (args.split + ".jsonl")).read_text(encoding="utf-8").split("\n") if line.strip()]
-    root = Path(json.loads((args.annotations / "annotations.json").read_text())["acoustic_root"])
+    root = Path(json.loads((args.annotations / "annotations.json").read_text(encoding="utf-8"))["acoustic_root"])
     args.output.mkdir(parents=True, exist_ok=True)
     chosen = []
     for voice in c.speakers:

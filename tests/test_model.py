@@ -8,13 +8,13 @@ import tempfile
 import unittest
 import torch
 
-from tiny_voca.config import CHECKPOINT_FORMAT, Config
-from tiny_voca.data import collate
-from tiny_voca.infer import load_model
-from tiny_voca.inspect import parameter_report
-from tiny_voca.losses import Discriminators
-from tiny_voca.model import SourceFilter, TinyVoca, cepstrum_response, filtered, pulse_train
-from tiny_voca.train import (WEIGHTS, TrainingSystem, atomic_save, export_model, learning_rate, load_compatible, optimize_step,
+from mini_voz.config import CHECKPOINT_FORMAT, Config
+from mini_voz.data import collate
+from mini_voz.infer import load_model
+from mini_voz.inspect import parameter_report
+from mini_voz.losses import Discriminators
+from mini_voz.model import SourceFilter, MiniVoz, cepstrum_response, filtered, pulse_train
+from mini_voz.train import (WEIGHTS, TrainingSystem, atomic_save, export_model, learning_rate, load_compatible, optimize_step,
                              teacher_probability)
 from helpers import SYMBOLS, sample, small_config, write_annotations
 
@@ -35,7 +35,7 @@ class ModelTests(unittest.TestCase):
         report = parameter_report(Config())
         self.assertEqual(sum(report["inference_parts"].values()), report["inference_parameters"])
         self.assertLess(report["inference_parameters"], 5_000_000)
-        self.assertEqual(report["inference_parameters"], sum(p.numel() for p in TinyVoca().parameters()))
+        self.assertEqual(report["inference_parameters"], sum(p.numel() for p in MiniVoz().parameters()))
         self.assertGreater(report["inference_parts"]["frame transformer B"], report["inference_parts"]["source-filter waveform head"])
 
     def test_pulse_train_has_the_requested_pitch_unit_power_and_band_limit(self):
@@ -77,7 +77,7 @@ class ModelTests(unittest.TestCase):
         self.assertGreater(float(impulse[:8].square().sum() / impulse.square().sum()), 0.999)
 
     def test_expand_skips_zero_duration_tokens_and_marks_positions(self):
-        model = TinyVoca(small_config()).eval()
+        model = MiniVoz(small_config()).eval()
         hidden = torch.arange(4, dtype=torch.float32)[None, :, None].expand(1, 4, 32).contiguous()
         durations = torch.tensor([[2, 0, 3, 1]])
         with torch.no_grad():
@@ -94,7 +94,7 @@ class ModelTests(unittest.TestCase):
 
     def test_padding_does_not_change_the_short_example(self):
         c = small_config()
-        model = TinyVoca(c).eval()
+        model = MiniVoz(c).eval()
         with torch.no_grad():        # make the heads non-trivial so the test has teeth
             for head in (model.vocoder.harmonic, model.vocoder.noise):
                 head.weight.normal_(std=0.05)
@@ -161,8 +161,8 @@ class ModelTests(unittest.TestCase):
         system, critics = TrainingSystem(c), Discriminators(periods=(2, 3), resolutions=((256, 64),))
         batch = collate([sample(c), sample(c, voice=1)])
         loss, _, auxiliary = system.objective(batch, 1.0, random_phase=False)
-        from tiny_voca.losses import generator_gan_loss
-        from tiny_voca.train import crops
+        from mini_voz.losses import generator_gan_loss
+        from mini_voz.train import crops
         wave = auxiliary["wave"]
         fake, real, index = crops(wave, batch["wave"], batch["frame_lengths"] * c.hop, 4096, 1)
         self.assertEqual(index.shape, (2, 4096))
@@ -176,7 +176,7 @@ class ModelTests(unittest.TestCase):
         self.assertAlmostEqual(float(balanced.norm() / reconstruction.norm()), 0.7, places=4)
 
     def test_pause_tokens_vanish_unless_predicted_present_and_pitch_range_scales_movement(self):
-        model = TinyVoca(small_config()).eval()
+        model = MiniVoz(small_config()).eval()
         tokens = sample(small_config())["tokens"][None]
         mask = torch.ones_like(tokens, dtype=torch.bool)
         hidden = torch.zeros(1, tokens.shape[1], 32)
@@ -196,10 +196,10 @@ class ModelTests(unittest.TestCase):
         self.assertEqual(model.predict_durations(hidden, mask, tokens, speed=2.5)[0][phones].tolist(), [1] * int(phones.sum()))
         prosody = torch.tensor([[[0.0, 1.0, 0.0], [0.4, 1.0, 0.0], [9.0, -1.0, 0.0], [-0.4, 1.0, 0.0]]])
         frame_mask = torch.ones(1, 4, dtype=torch.bool)
-        wide = TinyVoca.widen_pitch(prosody, frame_mask, 1.5)
+        wide = MiniVoz.widen_pitch(prosody, frame_mask, 1.5)
         torch.testing.assert_close(wide[0, [0, 1, 3], 0], torch.tensor([0.0, 0.6, -0.6]))      # around the voiced mean (0)
         torch.testing.assert_close(wide[..., 1:], prosody[..., 1:])
-        self.assertIs(TinyVoca.widen_pitch(prosody, frame_mask, 1.0), prosody)
+        self.assertIs(MiniVoz.widen_pitch(prosody, frame_mask, 1.0), prosody)
 
     def test_branching_keeps_old_weights_when_a_layer_grows(self):
         old = {"weight": torch.ones(1, 3), "bias": torch.full((1,), 2.0), "gone": torch.zeros(1)}
@@ -230,7 +230,7 @@ class ModelTests(unittest.TestCase):
         self.assertEqual(float(free["teacher_fraction"]), 0.0)
         torch.testing.assert_close(teacher["pitch"], free["pitch"])       # predictors do not depend on the conditioning choice
         # The pitch-spread term compares per-utterance standard deviations over trusted voiced frames.
-        from tiny_voca.train import masked_std
+        from mini_voz.train import masked_std
         values = torch.tensor([[1.0, 3.0, 100.0, 5.0], [2.0, 2.0, 2.0, 2.0]])
         mask = torch.tensor([[1.0, 1.0, 0.0, 1.0], [1.0, 1.0, 1.0, 0.0]])
         torch.testing.assert_close(masked_std(values, mask), torch.tensor([(8 / 3) ** 0.5, 1e-4]), atol=1e-5, rtol=1e-4)
@@ -247,7 +247,7 @@ class ModelTests(unittest.TestCase):
             system.objective(collate([item]), 1.0)
 
     def test_export_roundtrip_and_explicit_rejection_of_old_checkpoints(self):
-        model = TinyVoca(small_config()).eval()
+        model = MiniVoz(small_config()).eval()
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "model.pt"
             export_model(model, path, 7, "annotation")
@@ -259,7 +259,7 @@ class ModelTests(unittest.TestCase):
             state = torch.load(path, weights_only=True)
             self.assertEqual(state["format_version"], CHECKPOINT_FORMAT)
             for change, message in (({"format_version": 3}, "byte-token"),
-                                    ({"frontend": {**state["frontend"], "fingerprint": "other"}}, "front end")):
+                                    ({"frontend": {**state["frontend"], "fingerprint": "other"}}, "inventory or accent")):
                 atomic_save({**state, **change}, path)
                 with self.assertRaisesRegex(ValueError, message):
                     load_model(path)
@@ -271,7 +271,7 @@ class ModelTests(unittest.TestCase):
             (root / "config.json").write_text(json.dumps(c.to_dict()))
             train = write_annotations(root, c, "train")
             validation = write_annotations(root, c, "validation")
-            base = [sys.executable, "-m", "tiny_voca.train", "--train", str(train), "--validation", str(validation),
+            base = [sys.executable, "-m", "mini_voz.train", "--train", str(train), "--validation", str(validation),
                     "--config", str(root / "config.json"), "--device", "cpu", "--batch-frames", "200", "--max-batch", "2",
                     "--save-every", "1", "--gan-start", "1", "--warmup", "2", "--teacher-hold", "1", "--teacher-ramp", "1",
                     "--crop-samples", "4096", "--crops", "1", "--validation-size", "2", "--max-seconds", "300", "--keep-every", "2"]

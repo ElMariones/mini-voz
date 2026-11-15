@@ -1,87 +1,83 @@
-"""English front end: text -> phoneme tokens with a stress feature.
+"""Spanish front end: text -> phoneme tokens with a stress feature.
 
 The same code runs during annotation, training-set preparation and inference,
-so tokens can never drift between them. Two programs can produce the phonemes:
+so tokens can never drift between them.
 
-* ``espeak`` (front-end version 3, the default): eSpeak NG, as described below.
-  The current checkpoints and annotations were made with it.
-* ``own`` (front-end version 4): the separate ``dizione`` package, a dictionary
-  built from CMUdict, a small model for unknown words and rules. No eSpeak, so
-  the whole system can be shipped under a permissive licence. Same 76 symbols.
-
-Choose with ``set_frontend("own")`` or ``TINY_VOCA_FRONTEND=own``. Everything
-below about tokens holds for both; the rest of this note is the eSpeak path.
-
-* eSpeak NG (``en-us``) is the only pronunciation source. It is an external
-  rule-based program: no neural G2P and no downloaded weights.
+* eSpeak NG is the only pronunciation source. It is an external rule-based
+  program: no neural G2P and no downloaded weights. Spanish spelling is close
+  to phonemic, so its rules are reliable. The accent is chosen with
+  ``MINI_VOZ_ACCENT``: ``es`` (Castilian, the default: "z" and soft "c" are
+  ``θ``) or ``es-419`` (Latin American: they are ``s``). Both use the same
+  symbol inventory; a checkpoint records which one it was trained with.
 * A token is one eSpeak phoneme exactly as eSpeak segments it (``--sep``), for
-  example ``t``, ``aɪ``, ``ɑːɹ`` or ``n̩``. This is also the label inventory of
+  example ``t``, ``ɾ``, ``tʃ`` or ``aɪ``. This is also the label inventory of
   the phoneme recogniser used for offline forced alignment, so one aligned
   label corresponds to exactly one token.
 * Lexical stress is a parallel feature (0 none, 1 primary, 2 secondary), not a
   token, so it never has to be given audio frames.
-* Punctuation, word boundaries and the utterance edges are explicit tokens that
-  may last zero frames. They carry pauses when the recording has them.
+* Punctuation (including the opening ``¿`` and ``¡``), word boundaries and the
+  utterance edges are explicit tokens that may last zero frames. They carry
+  pauses when the recording has them.
 
-Versions 1 and 2 encoded IPA as UTF-8 bytes and piped text to eSpeak without a
-final newline; eSpeak NG 1.51 then drops the last character of the input, so
-the final phonemes of every clause were wrong. Version 3 terminates the input
-and has a regression test for it.
+The input to eSpeak always ends with a newline: eSpeak NG 1.51 silently drops
+the last character of unterminated standard input.
 """
 
 from dataclasses import dataclass
 import hashlib
 import json
 import os
+from pathlib import Path
 import re
 import shutil
 import subprocess
 import unicodedata
 
-FRONTEND_VERSION = 3
-ESPEAK_VOICE = "en-us"
+FRONTEND_VERSION = 1
+ACCENTS = ("es", "es-419")
+ACCENT_VARIABLE = "MINI_VOZ_ACCENT"
+ESPEAK_VARIABLE = "MINI_VOZ_ESPEAK"     # full path of espeak-ng when it is not on PATH
+ESPEAK_VOICE = os.environ.get(ACCENT_VARIABLE, "es")
+if ESPEAK_VOICE not in ACCENTS:
+    raise ValueError(f"{ACCENT_VARIABLE} must be one of {ACCENTS}, not {ESPEAK_VOICE!r}")
 SEPARATOR = "_"
-FRONTENDS = ("espeak", "own")
-FRONTEND_VARIABLE = "TINY_VOCA_FRONTEND"
-_frontend = os.environ.get(FRONTEND_VARIABLE, "espeak")
-if _frontend not in FRONTENDS:
-    raise ValueError(f"{FRONTEND_VARIABLE} must be one of {FRONTENDS}, not {_frontend!r}")
 
 PAD, BOS, EOS, SP, UNK = "<pad>", "<bos>", "<eos>", "<sp>", "<unk>"
 SPECIALS = (PAD, BOS, EOS, SP, UNK)
-PUNCTUATION = (",", ".", "?", "!", ";", ":", '"', "'", "(", ")", "—", "…")
-CONSONANTS = ("p", "b", "t", "d", "k", "ɡ", "f", "v", "θ", "ð", "s", "z", "ʃ", "ʒ", "h",
-              "m", "n", "ŋ", "l", "ɹ", "j", "w", "tʃ", "dʒ", "ɾ", "ʔ")
-VOWELS = ("ə", "ɐ", "ɚ", "ᵻ", "ɪ", "i", "iː", "ɛ", "æ", "ʌ", "ɑː", "ɔ", "ɔː", "ʊ", "uː", "ɜː",
-          "eɪ", "aɪ", "ɔɪ", "oʊ", "aʊ", "iə", "oː",
-          "ɑːɹ", "ɔːɹ", "oːɹ", "ɪɹ", "ɛɹ", "ʊɹ", "aɪɚ", "aɪə", "əl", "n̩")
+PUNCTUATION = (",", ".", "?", "!", ";", ":", '"', "'", "(", ")", "—", "…", "¿", "¡")
+CONSONANTS = ("p", "b", "t", "d", "k", "ɡ", "f", "θ", "s", "x", "ʃ", "tʃ", "m", "n", "ɲ", "ŋ", "l", "ʎ", "ɾ", "r",
+              "j", "w", "β", "ð", "ɣ", "ʝ")
+VOWELS = ("a", "e", "i", "o", "u", "ɛ", "aɪ", "eɪ", "oɪ", "aʊ", "eʊ")
 PHONES = CONSONANTS + VOWELS
 # Append-only: changing the order or removing a symbol invalidates checkpoints.
 SYMBOLS = SPECIALS + PUNCTUATION + PHONES
 SYMBOL_TO_ID = {symbol: index for index, symbol in enumerate(SYMBOLS)}
 PHONE_SET = frozenset(PHONES)
 PHONE_IDS = frozenset(SYMBOL_TO_ID[p] for p in PHONES) | {SYMBOL_TO_ID[UNK]}
-VOICELESS = frozenset(("p", "t", "k", "f", "θ", "s", "ʃ", "h", "tʃ", "ʔ"))
+VOICELESS = frozenset(("p", "t", "k", "f", "θ", "s", "x", "ʃ", "tʃ"))
 VOWEL_SET = frozenset(VOWELS)
 STRESS_MARKS = {"ˈ": 1, "ˌ": 2}
 
-# eSpeak phonemes outside the inventory (foreign words, rare allophones) map to
-# the closest inventory phone(s). Anything else becomes <unk> and is reported.
+# eSpeak phonemes outside the inventory (loanwords, rare allophones) map to the
+# closest inventory phone(s). Anything else becomes <unk> and is reported.
 FALLBACK = {
-    "r": ("ɹ",), "ɻ": ("ɹ",), "ʁ": ("ɹ",), "x": ("k",), "ç": ("h",), "ɬ": ("l",), "ɫ": ("l",), "ɲ": ("n", "j"),
-    "ts": ("t", "s"), "dz": ("d", "z"), "β": ("v",), "ɣ": ("ɡ",), "ʎ": ("l", "j"),
-    "a": ("æ",), "aː": ("ɑː",), "ɑ": ("ɑː",), "ɒ": ("ɑː",), "ɑ̃": ("ɑː",), "ɔ̃": ("ɔː",), "ɛ̃": ("æ",),
-    "e": ("eɪ",), "eː": ("eɪ",), "o": ("oʊ",), "u": ("uː",), "y": ("uː",), "yː": ("uː",),
-    "ø": ("ɜː",), "øː": ("ɜː",), "œ": ("ɜː",), "ɜ": ("ɜː",), "ɛː": ("ɛ",), "ɪː": ("ɪ",),
-    "əʊ": ("oʊ",), "eə": ("ɛɹ",), "ɪə": ("iə",), "ʊə": ("ʊɹ",), "aʊɚ": ("aʊ", "ɚ"), "l̩": ("əl",), "m̩": ("ə", "m"),
+    "z": ("s",), "v": ("b",), "h": ("x",), "ç": ("x",), "ɹ": ("ɾ",), "ɻ": ("ɾ",), "ʁ": ("r",), "ʀ": ("r",),
+    "dʒ": ("ʝ",), "ʒ": ("ʝ",), "ɟ": ("ʝ",), "ʑ": ("ʝ",), "ɕ": ("ʃ",), "ts": ("t", "s"), "dz": ("d", "s"),
+    "ɫ": ("l",), "ɬ": ("l",), "c": ("k",), "q": ("k",), "ɱ": ("m",),
+    "ə": ("e",), "ɜ": ("e",), "ø": ("e",), "œ": ("e",), "æ": ("a",), "ɐ": ("a",), "ʌ": ("a",), "ɑ": ("a",), "ɒ": ("o",),
+    "ɔ": ("o",), "ɪ": ("i",), "y": ("i",), "ʊ": ("u",), "ɚ": ("e", "ɾ"), "ɔɪ": ("oɪ",), "oʊ": ("o", "u"), "əʊ": ("o", "u"),
+    "ɑ̃": ("a", "n"), "ɔ̃": ("o", "n"), "ɛ̃": ("e", "n"),
 }
 
 _QUOTES = str.maketrans({"‘": "'", "’": "'", "‚": "'", "‛": "'", "`": "'", "´": "'",
                          "“": '"', "”": '"', "„": '"', "‟": '"', "«": '"', "»": '"',
                          "–": "—", "―": "—", "[": "(", "{": "(", "]": ")", "}": ")"})
 _PUNCTUATION_CHARS = frozenset(PUNCTUATION)
-ABBREVIATIONS = {"mr", "mrs", "ms", "dr", "prof", "st", "jr", "sr", "vs", "etc"}
+# Read as a word by eSpeak ("Sr." -> "señor"); their full stop is not a sentence mark.
+ABBREVIATIONS = {"sr", "sra", "srta", "sres", "dr", "dra", "d", "dña", "ud", "uds", "vd", "vds", "prof", "etc",
+                 "pág", "núm", "av", "avda", "tel", "art", "cap", "vol", "ej"}
 _LANGUAGE_TAG = re.compile(r"\((?:_?[a-z0-9]_?){2,3}(?:-(?:_?[a-z0-9]_?)+)*\)")
+_WINDOWS_ESPEAK = (r"C:\Program Files\eSpeak NG\espeak-ng.exe", r"C:\Program Files (x86)\eSpeak NG\espeak-ng.exe")
 
 
 class NothingToPronounce(ValueError):
@@ -99,43 +95,13 @@ class Phonemized:
         return len(self.ids)
 
 
-def frontend():
-    """Name of the program that produces the phonemes: ``"espeak"`` or ``"own"``."""
-    return _frontend
-
-
-def set_frontend(name):
-    """Select the phonemizer for this process. Tokens of the two front ends
-    must not be mixed: annotations and checkpoints record which one made them."""
-    global _frontend
-    if name not in FRONTENDS:
-        raise ValueError(f"front end must be one of {FRONTENDS}, not {name!r}")
-    _frontend = name
-
-
-def _dizione():
-    try:
-        import dizione
-    except ImportError as error:
-        raise RuntimeError('the "own" front end needs the dizione package: pip install dizione') from error
-    if tuple(dizione.symbols.SYMBOLS) != SYMBOLS:
-        raise RuntimeError("dizione's symbol inventory differs from this model's")
-    return dizione
-
-
 def frontend_identity():
-    if _frontend == "own":
-        phonemizer = _dizione()
-        return {"frontend_version": phonemizer.VERSION, "phonemizer": "dizione", "symbols": list(SYMBOLS)}
-    return {"frontend_version": FRONTEND_VERSION, "voice": ESPEAK_VOICE, "separator": SEPARATOR,
+    return {"frontend_version": FRONTEND_VERSION, "language": "es", "voice": ESPEAK_VOICE, "separator": SEPARATOR,
             "symbols": list(SYMBOLS), "fallback": {key: list(value) for key, value in sorted(FALLBACK.items())}}
 
 
 def frontend_runtime():
-    """What an annotation run records about the exact program behind its
-    tokens: the eSpeak version, or the fingerprint of the phonemizer build."""
-    if _frontend == "own":
-        return {"phonemizer": _dizione().identity()["fingerprint"]}
+    """What an annotation run records about the exact program behind its tokens."""
     return {"espeak_version": espeak_version()}
 
 
@@ -143,8 +109,36 @@ def frontend_fingerprint():
     return hashlib.sha256(json.dumps(frontend_identity(), sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
 
+# Written forms eSpeak would spell out letter by letter.
+EXPANSIONS = (("EE. UU.", "Estados Unidos"), ("EE.UU.", "Estados Unidos"), ("EE UU", "Estados Unidos"),
+              ("p. ej.", "por ejemplo"), ("a. m.", "de la mañana"), ("p. m.", "de la tarde"))
+
+
+# Written forms eSpeak would spell out letter by letter.
+EXPANSIONS = (("EE. UU.", "Estados Unidos"), ("EE.UU.", "Estados Unidos"), ("EE UU", "Estados Unidos"),
+              ("p. ej.", "por ejemplo"), ("a. m.", "de la mañana"), ("p. m.", "de la tarde"))
+
+
+# Written forms eSpeak would spell out letter by letter.
+EXPANSIONS = (("EE. UU.", "Estados Unidos"), ("EE.UU.", "Estados Unidos"), ("EE UU", "Estados Unidos"),
+              ("p. ej.", "por ejemplo"), ("a. m.", "de la mañana"), ("p. m.", "de la tarde"))
+
+
+# Written forms eSpeak would spell out letter by letter.
+EXPANSIONS = (("EE. UU.", "Estados Unidos"), ("EE.UU.", "Estados Unidos"), ("EE UU", "Estados Unidos"),
+              ("p. ej.", "por ejemplo"), ("a. m.", "de la mañana"), ("p. m.", "de la tarde"))
+
+
 def normalize_text(text):
     text = unicodedata.normalize("NFKC", text).translate(_QUOTES)
+    for written, spoken in EXPANSIONS:
+        text = text.replace(written, spoken)
+    for written, spoken in EXPANSIONS:
+        text = text.replace(written, spoken)
+    for written, spoken in EXPANSIONS:
+        text = text.replace(written, spoken)
+    for written, spoken in EXPANSIONS:
+        text = text.replace(written, spoken)
     text = re.sub(r"\.{3,}", "…", text)
     text = re.sub(r"-{2,}|\s-\s", "—", text)
     return re.sub(r"\s+", " ", text).strip()
@@ -152,7 +146,7 @@ def normalize_text(text):
 
 def chunks(text):
     """Yield ``(is_punctuation, piece)``. Decimals, clock times, digit groups,
-    contractions, title abbreviations and initialisms stay inside the text piece
+    apostrophes inside a word and title abbreviations stay inside the text piece
     for eSpeak; every other punctuation mark becomes its own token."""
     start = 0
     for i, char in enumerate(text):
@@ -165,10 +159,8 @@ def chunks(text):
         if char in ".,:" and previous.isdigit() and following.isdigit():
             continue
         if char == ".":
-            word = re.search(r"([A-Za-z]+)$", text[:i])
+            word = re.search(r"([^\W\d_]+)$", text[:i])
             if word and word[1].lower() in ABBREVIATIONS:
-                continue
-            if previous.isalpha() and following.isalpha():
                 continue
         if text[start:i].strip():
             yield False, text[start:i].strip()
@@ -179,25 +171,28 @@ def chunks(text):
 
 
 def espeak_executable():
+    chosen = os.environ.get(ESPEAK_VARIABLE)
+    if chosen:
+        return chosen
     executable = shutil.which("espeak-ng")
     if executable is None:
-        raise RuntimeError("Install espeak-ng on the cloud machine before preprocessing/inference")
+        executable = next((path for path in _WINDOWS_ESPEAK if Path(path).is_file()), None)
+    if executable is None:
+        raise RuntimeError("espeak-ng was not found. macOS: brew install espeak-ng. Windows: winget install eSpeak-NG.eSpeak-NG. "
+                           f"Or set {ESPEAK_VARIABLE} to the full path of the program.")
     return executable
 
 
 def espeak_version():
-    return subprocess.run([espeak_executable(), "--version"], capture_output=True, text=True, check=True, timeout=10).stdout.strip()
+    return subprocess.run([espeak_executable(), "--version"], capture_output=True, text=True, encoding="utf-8",
+                          check=True, timeout=10).stdout.strip()
 
 
 def espeak_words(piece):
-    """Phonemize one text piece. Returns words as lists of ``(phone, stress)``.
-
-    The input must end with a newline: eSpeak NG 1.51 silently drops the last
-    character of unterminated standard input.
-    """
+    """Phonemize one text piece. Returns words as lists of ``(phone, stress)``."""
     result = subprocess.run(
         [espeak_executable(), "-q", "--ipa", "--sep=" + SEPARATOR, "-v", ESPEAK_VOICE, "--stdin"],
-        input=piece.rstrip("\n") + "\n", text=True, capture_output=True, check=True, timeout=30)
+        input=piece.rstrip("\n") + "\n", text=True, encoding="utf-8", capture_output=True, check=True, timeout=30)
     return parse_espeak(result.stdout)
 
 
@@ -269,8 +264,6 @@ def tokenize(pieces):
 def phonemize(text):
     if not isinstance(text, str) or not text.strip():
         raise ValueError("text must not be empty")
-    if _frontend == "own":
-        return tokenize(_dizione().pieces(text))
     pieces = []
     for punctuation, piece in chunks(normalize_text(text)):
         pieces.append((True, piece) if punctuation else (False, espeak_words(piece)))

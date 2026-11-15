@@ -1,11 +1,11 @@
 """ONNX export of free-running synthesis.
 
-    python -m tiny_voca.export --checkpoint inference.pt --output tiny-voca.onnx
+    python -m mini_voz.export --checkpoint inference.pt --output mini-voz.onnx
 
 The exported graph speaks one utterance: phoneme ids and stress in, waveform
-out. Text is turned into ids outside the graph (``tiny_voca.text.phonemize``).
+out. Text is turned into ids outside the graph (``mini_voz.text.phonemize``).
 
-``Exportable`` computes the same audio as ``TinyVoca.synthesize`` for a single
+``Exportable`` computes the same audio as ``MiniVoz.synthesize`` for a single
 utterance, written with operations ONNX has: the short-time Fourier transforms
 of the source-filter head become real convolutions with fixed kernels, the
 complex filter responses are kept as separate real and imaginary parts, and
@@ -32,7 +32,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
-from .infer import load_model, match_frontend
+from .infer import load_model
 from .text import SYMBOLS, frontend_fingerprint, frontend_identity
 
 INPUTS = ("tokens", "stress", "voice", "speed", "pitch_shift", "pitch_range")
@@ -232,13 +232,12 @@ def metadata(model, checkpoint):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Export a tiny-voca inference checkpoint to ONNX")
+    parser = argparse.ArgumentParser(description="Export a mini-voz inference checkpoint to ONNX")
     parser.add_argument("--checkpoint", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--external-noise", action="store_true", help="Take the noise signal as an input (for exact comparisons)")
     parser.add_argument("--opset", type=int, default=17)
     args = parser.parse_args()
-    match_frontend(args.checkpoint)
     model = load_model(args.checkpoint, "cpu")
     args.output.parent.mkdir(parents=True, exist_ok=True)
     export(model, args.output, args.external_noise, args.opset)

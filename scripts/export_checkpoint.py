@@ -8,10 +8,10 @@ import argparse
 from pathlib import Path
 import torch
 
-from tiny_voca.config import CHECKPOINT_FORMAT, Config
-from tiny_voca.model import TinyVoca
-from tiny_voca.text import frontend_fingerprint
-from tiny_voca.train import export_model
+from mini_voz.config import CHECKPOINT_FORMAT, Config
+from mini_voz.model import MiniVoz
+from mini_voz.text import frontend_fingerprint
+from mini_voz.train import export_model
 
 
 def main():
@@ -22,7 +22,7 @@ def main():
     state = torch.load(args.checkpoint, map_location="cpu", weights_only=True)
     if state.get("format_version") != CHECKPOINT_FORMAT or state["frontend"] != frontend_fingerprint():
         raise ValueError("checkpoint format or front end does not match this code")
-    model = TinyVoca(Config.from_dict(state["config"]))
+    model = MiniVoz(Config.from_dict(state["config"]))
     model.load_state_dict({k.removeprefix("model."): v for k, v in state["system"].items() if k.startswith("model.")}, strict=True)
     export_model(model, args.output, state["step"], state["annotation"])
     print(f"exported step {state['step']} with {sum(p.numel() for p in model.parameters()):,} parameters to {args.output}")

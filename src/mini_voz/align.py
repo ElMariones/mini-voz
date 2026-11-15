@@ -248,7 +248,7 @@ def quality(symbols, durations, spans, log_probs, labels, voiced, level_db, hop,
 
 
 class PhoneRecognizer:
-    """The pretrained annotation model. Loaded from the local HF cache only."""
+    """The pretrained annotation model (about 1.2 GB, downloaded once into the Hugging Face cache)."""
 
     def __init__(self, device="cuda", name=ALIGNER_MODEL, local_files_only=True):
         import json

@@ -1,4 +1,4 @@
-# tiny-voca annotations v3: phoneme tokens and validated durations
+# mini-voz annotations v3: phoneme tokens and validated durations
 
 Annotation layer for the recordings in this dataset at revision
 `93dfa15bf40ec278a3ea1b418294c5620d850a8f`. It adds, for every accepted
@@ -117,6 +117,6 @@ rows; the dataset's `LICENSE.md` continues to apply.
 Reproduce on the training machine:
 
 ```bash
-python -m tiny_voca.annotate --features <acoustic feature dir> \
+python -m mini_voz.annotate --features <acoustic feature dir> \
   --output <new directory> --dataset-revision 93dfa15bf40ec278a3ea1b418294c5620d850a8f
 ```

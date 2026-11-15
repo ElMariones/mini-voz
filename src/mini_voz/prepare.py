@@ -1,15 +1,14 @@
-"""Cloud-only ACOUSTIC feature preparation from local JSONL or HF-style Parquet shards.
+"""ACOUSTIC feature preparation from local JSONL or HF-style Parquet shards.
 
 Stores the waveform, log-mel, pitch/voicing and energy of each recording. It
 does not tokenize text: phoneme tokens and durations are a separate, versioned
-annotation layer (``tiny_voca.annotate``), so a front-end or aligner change
+annotation layer (``mini_voz.annotate``), so a front-end or aligner change
 never forces this expensive step to run again.
 
-No network access: use the HF CLI separately to obtain a pinned dataset snapshot.
+No network access. ``scripts/build_manifest.py`` writes the JSONL from a folder of recordings.
 """
 
 import argparse
-import fcntl
 import hashlib
 import io
 import json
@@ -23,6 +22,47 @@ from .config import Config
 from .journal import append, atomic_json, file_hash, json_safe, recover
 
 MIN_FRAMES = 32
+
+
+def lock_exclusive(stream):
+    """Fail at once when another preparation of this split is running."""
+    if os.name == "nt":
+        import msvcrt
+        stream.seek(0)
+        msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
+    else:
+        import fcntl
+        fcntl.flock(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+
+def lock_exclusive(stream):
+    """Fail at once when another preparation of this split is running."""
+    if os.name == "nt":
+        import msvcrt
+        stream.seek(0)
+        msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
+    else:
+                fcntl.flock(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+
+def lock_exclusive(stream):
+    """Fail at once when another preparation of this split is running."""
+    if os.name == "nt":
+        import msvcrt
+        stream.seek(0)
+        msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
+    else:
+                fcntl.flock(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+
+def lock_exclusive(stream):
+    """Fail at once when another preparation of this split is running."""
+    if os.name == "nt":
+        import msvcrt
+        stream.seek(0)
+        msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
+    else:
+                fcntl.flock(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
 
 
 def records(source):
@@ -76,11 +116,11 @@ def main():
     parser.add_argument("--split", choices=("train", "validation", "test"), required=True)
     parser.add_argument("--resume", action="store_true", help="Skip durably accepted/rejected records from these same inputs")
     args = parser.parse_args()
-    c = Config.from_dict(json.loads(args.config.read_text())) if args.config else Config()
+    c = Config.from_dict(json.loads(args.config.read_text(encoding="utf-8"))) if args.config else Config()
     args.output.mkdir(parents=True, exist_ok=True)
     # Lock is held through completion or an exception. Different splits may run separately.
-    with (args.output/(args.split+".lock")).open("a") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    with (args.output/(args.split+".lock")).open("a+", encoding="utf-8") as lock:
+        lock_exclusive(lock)
         prepare_split(args, c)
 
 
@@ -96,12 +136,12 @@ def prepare_split(args, c):
     if metadata_path.exists():
         if not args.resume:
             raise FileExistsError("preparation exists; use --resume or a new directory")
-        if json.loads(metadata_path.read_text())["identity"] != identity:
+        if json.loads(metadata_path.read_text(encoding="utf-8"))["identity"] != identity:
             raise ValueError("resume inputs, feature schema or admission limits changed")
     elif manifest.exists() or rejects.exists():
         raise ValueError("manifest has no compatible preparation metadata; use a new directory")
     feature_schema = args.output/"features.json"
-    if feature_schema.exists() and json.loads(feature_schema.read_text())["fingerprint"] != c.acoustic_fingerprint:
+    if feature_schema.exists() and json.loads(feature_schema.read_text(encoding="utf-8"))["fingerprint"] != c.acoustic_fingerprint:
         raise ValueError("feature schema differs from other splits in this directory")
     atomic_json(feature_schema, {"fingerprint":c.acoustic_fingerprint, "fields":c.acoustic_config})
     atomic_json(metadata_path, {"identity":identity, "complete":False})

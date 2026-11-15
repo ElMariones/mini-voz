@@ -1,20 +1,20 @@
 import argparse
-import os
 from pathlib import Path
 import re
 import torch
 from .config import CHECKPOINT_FORMAT, Config
-from .model import TinyVoca, UtteranceTooLong
-from .text import FRONTEND_VARIABLE, FRONTENDS, NothingToPronounce, frontend_fingerprint, phonemize, set_frontend
+from .model import MiniVoz, UtteranceTooLong
+from .device import pick_device
+from .text import NothingToPronounce, frontend_fingerprint, phonemize
 
 # The loudest sample of the audio that ``speak_text`` and the command return.
 PEAK = 0.99
-# Said when no sentence of a text could be read. The browser demo says the same.
-ENGLISH_ONLY = "tiny-voca only reads English for now"
+# Said when no sentence of a text could be read.
+SPANISH_ONLY = "mini-voz only reads Spanish for now"
 _SPACE = re.compile("[\\s" + chr(0xFEFF) + "]+")    # JavaScript's \s, which the demo uses, takes U+FEFF too
-_SENTENCE_END = re.compile(r"""(?:(?<=[.!?…])|(?<=[.!?…]["')\]]))\s+(?=["'(\[]?[A-Z0-9])""")
-_NOT_AN_END = re.compile(r"(?:\b(?:mr|mrs|ms|dr|prof|sr|jr|st|vs|etc|no|inc|ltd|co|e\.g|i\.e|a\.m|p\.m)|\b[A-Z])\.$",
-                         re.IGNORECASE | re.ASCII)
+_SENTENCE_END = re.compile(r"""(?:(?<=[.!?…])|(?<=[.!?…]["')\]]))\s+(?=["'(\[¿¡]*[A-ZÁÉÍÓÚÜÑ0-9])""")
+_NOT_AN_END = re.compile(r"(?:\b(?:sr|sra|srta|sres|dr|dra|d|dña|ud|uds|vd|vds|prof|pág|núm|av|avda|tel|art|cap|vol|ej)|\b[A-ZÁÉÍÓÚÜÑ])\.$",
+                         re.IGNORECASE)
 _CLAUSE_END = re.compile(r"(?<=[,;:—])\s+")
 _TEXT_END = re.compile("[\\s" + chr(0xFEFF) + "]+$")
 _CLOSING = "\"'”’)]»"                               # these may stand after the last mark: She said "go!"
@@ -22,36 +22,22 @@ _CLOSING = "\"'”’)]»"                               # these may stand after
 
 def load_model(path, device="cpu", check_frontend=True):
     """``check_frontend=False`` lets a checkpoint speak tokens of the other
-    front end (same inventory, slightly different conventions): for listening
-    tests of the new phonemizer before the model is retrained on it."""
+    accent (same inventory): a Castilian model reading Latin American
+    phonemes or the reverse, for listening tests."""
     state = torch.load(path, map_location="cpu", weights_only=True)
     if state.get("format_version") != CHECKPOINT_FORMAT:
         raise ValueError("unsupported checkpoint format: byte-token checkpoints (format 2-3) cannot be used with this code")
     if check_frontend and state["frontend"]["fingerprint"] != frontend_fingerprint():
-        raise ValueError("checkpoint was trained with a different phoneme inventory/front end")
-    model = TinyVoca(Config.from_dict(state["config"]))
+        raise ValueError("checkpoint was trained with a different phoneme inventory or accent "
+                         "(MINI_VOZ_ACCENT=es or es-419 must match the one used for training)")
+    model = MiniVoz(Config.from_dict(state["config"]))
     model.load_state_dict(state["model"], strict=True)
     return model.to(device).eval()
 
 
-def match_frontend(path):
-    """Select the front end the checkpoint was trained with."""
-    wanted = torch.load(path, map_location="cpu", weights_only=True)["frontend"]["fingerprint"]
-    for name in FRONTENDS:
-        set_frontend(name)
-        try:
-            if frontend_fingerprint() == wanted:
-                return name
-        except ImportError:
-            continue
-    set_frontend(FRONTENDS[0])
-    return None
-
-
 def sentences(text):
     """The sentences of ``text``, without a break after a title or an initial
-    or inside a number. The browser demo splits the same way
-    (``web/public/worker.js``); keep the two alike."""
+    or inside a number."""
     parts, current = [], ""
     for piece in _SENTENCE_END.split(_SPACE.sub(" ", text).strip()):
         current = f"{current} {piece}" if current else piece
@@ -67,8 +53,7 @@ def finished(text):
     """``text`` with a full stop added when it ends without a mark. Before a
     final mark the voice lengthens the last syllable and lets the sound fall;
     without one the audio breaks off. A face or another sign after the last
-    word is no mark ("see you :)"), a comma or a colon is one. The browser
-    demo does the same (``web/public/worker.js``); keep the two alike."""
+    word is no mark ("hasta luego :)"), a comma or a colon is one."""
     body = _TEXT_END.sub("", text)
     if not body:
         return text
@@ -163,38 +148,36 @@ def speak_text(model, text, voice, speed=1.0, pitch_shift=0.0, seed=0, pitch_ran
     for sentence in sentences(finished(text)):
         read(sentence)
     if not waves:
-        raise NothingToPronounce(f"nothing in the text could be read: {ENGLISH_ONLY}")
+        raise NothingToPronounce(f"nothing in the text could be read: {SPANISH_ONLY}")
     wave = torch.cat(waves)
     return (wave if peak is None else limit_peak(wave, peak)), spoken
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Generate speech from a trained tiny-voca inference checkpoint")
+    parser = argparse.ArgumentParser(description="Generate speech from a trained mini-voz inference checkpoint")
     parser.add_argument("--checkpoint", type=Path, required=True)
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--text", help="Text of any length; it is read sentence by sentence")
     source.add_argument("--text-file", type=Path, help="Read the text from a file (UTF-8)")
-    parser.add_argument("--voice", choices=("F2", "M2"), default="F2")
+    parser.add_argument("--voice", help="One of the voices the checkpoint was trained with (default: the first)")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--speed", type=float, default=1)
     parser.add_argument("--pitch-shift", type=float, default=0, help="Added to log F0 (0.058 is about one semitone)")
     parser.add_argument("--pitch-range", type=float, default=1, help="Scale pitch movement around the utterance mean (1 = as predicted)")
-    parser.add_argument("--device", default="cpu")
-    parser.add_argument("--frontend", choices=FRONTENDS, help="Phonemizer (default: TINY_VOCA_FRONTEND, else the one the checkpoint was trained with)")
+    parser.add_argument("--device", default="cpu", help="cpu (fast enough), or auto, cuda, mps")
     parser.add_argument("--allow-frontend-mismatch", action="store_true",
-                        help="Speak although the checkpoint was trained on the other front end's tokens")
+                        help="Speak although the checkpoint was trained with the other accent's phonemes")
     args = parser.parse_args()
     import soundfile as sf
-    if args.frontend:
-        set_frontend(args.frontend)
-    elif FRONTEND_VARIABLE not in os.environ:
-        match_frontend(args.checkpoint)
-    model = load_model(args.checkpoint, args.device, check_frontend=not args.allow_frontend_mismatch)
+    model = load_model(args.checkpoint, pick_device(args.device), check_frontend=not args.allow_frontend_mismatch)
+    voice = args.voice or model.config.speakers[0]
+    if voice not in model.config.speakers:
+        parser.error(f"--voice must be one of {', '.join(model.config.speakers)}")
     text = args.text if args.text is not None else args.text_file.read_text(encoding="utf-8")
     try:
-        raw, spoken = speak_text(model, text, args.voice, args.speed, args.pitch_shift, pitch_range=args.pitch_range, peak=None)
+        raw, spoken = speak_text(model, text, voice, args.speed, args.pitch_shift, pitch_range=args.pitch_range, peak=None)
     except NothingToPronounce:
-        parser.exit(1, f"{ENGLISH_ONLY}. Nothing in the text could be read, so no file was written.\n")
+        parser.exit(1, f"{SPANISH_ONLY}. Nothing in the text could be read, so no file was written.\n")
     wave = limit_peak(raw)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     # Float samples, never above PEAK: a later conversion to 16-bit does not clip.

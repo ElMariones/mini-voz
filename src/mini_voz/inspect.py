@@ -32,7 +32,7 @@ def main():
     parser = argparse.ArgumentParser(description="Count all parameters without downloading weights")
     parser.add_argument("--config", type=Path)
     args = parser.parse_args()
-    c = Config.from_dict(json.loads(args.config.read_text())) if args.config else Config()
+    c = Config.from_dict(json.loads(args.config.read_text(encoding="utf-8"))) if args.config else Config()
     print(json.dumps(parameter_report(c), indent=2))
 
 

@@ -18,7 +18,7 @@ from pathlib import Path
 import random
 import re
 
-from tiny_voca.text import phonemize
+from mini_voz.text import phonemize
 
 OK = re.compile(r"^[A-Z][A-Za-z ,;'\-]+[.?!]$")
 FIRST = ("Nazeem Maya Liam Olivia Noah Ava Ethan Sofia Lucas Amara Diego Priya Kenji Fatima Omar Chloe Mateo Aisha Ravi Elena "
@@ -147,7 +147,7 @@ def main():
     repo = "https://github.com/common-voice/common-voice/tree/main/server/data/en"
     counts = {"collector": take(args.collector.read_text(encoding="utf-8", errors="ignore").splitlines(), args.collector_count, "common_voice_sentence_collector", repo, "conversation"),
               "wiki": take(rng.sample(args.wiki.read_text(encoding="utf-8", errors="ignore").splitlines(), 60000), args.wiki_count, "common_voice_wiki", repo, "reading"),
-              "templates": take(templates(rng, args.template_count * 2), args.template_count, "tiny_voca_templates", "https://huggingface.co/datasets/n4ze3m/tiny-voca", "pronunciation")}
+              "templates": take(templates(rng, args.template_count * 2), args.template_count, "mini_voz_templates", "https://huggingface.co/datasets/n4ze3m/mini-voz", "pronunciation")}
     rows.sort(key=lambda r: (r["character_count"], r["id"]))
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows), encoding="utf-8")

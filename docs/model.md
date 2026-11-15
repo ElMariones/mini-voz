@@ -80,7 +80,7 @@ phonemes, then 38,737 steps on both batches with dizione phonemes.
 
 Word error rate of synthesized speech, transcribed with Whisper small.en.
 
-| Sentences | Clips | WER, tiny-voca | WER, recordings |
+| Sentences | Clips | WER, mini-voz | WER, recordings |
 |---|---:|---:|---:|
 | Validation | 8 | 0.6% | 0.6% |
 | Test | 8 | 0.9% | 0.9% |

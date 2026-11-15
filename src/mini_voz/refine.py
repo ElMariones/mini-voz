@@ -78,7 +78,7 @@ def banded_viterbi(scores, starts, ends, band):
     return durations
 
 
-def refine(items, config, device="cuda", iterations=2, band=4, steps=3000, batch=256, window=128,
+def refine(items, config, device="cpu", iterations=2, band=4, steps=3000, batch=256, window=128,
            prior_scale=0.5, seed=20261113, log=print):
     """Refine durations for ``items``: dicts with ``symbols``, ``durations``,
     ``mel`` (float tensor [frames, n_mels]), ``speaker`` (int) and ``group``

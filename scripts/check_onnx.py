@@ -1,6 +1,6 @@
 """Compare an ONNX export with the PyTorch model and time it on the CPU.
 
-    python check_onnx.py --checkpoint inference.pt --onnx test.onnx [--release tiny-voca.onnx]
+    python check_onnx.py --checkpoint inference.pt --onnx test.onnx [--release mini-voz.onnx]
 
 ``--onnx`` is an export made with ``--external-noise`` so the audio can be
 compared sample by sample. ``--release`` is the normal export; it is timed and
@@ -18,12 +18,12 @@ import onnxruntime as ort
 import soundfile as sf
 import torch
 
-from tiny_voca.export import Exportable
-from tiny_voca.infer import load_model, match_frontend
-from tiny_voca.text import phonemize
+from mini_voz.export import Exportable
+from mini_voz.infer import load_model
+from mini_voz.text import phonemize
 
 SENTENCES = (
-    "Hello! This is tiny voca.",
+    "Hello! This is mini voz.",
     "The weather is nice today, and I feel very relaxed.",
     "Did you really pay $42.50 for that on March 3rd, 2024?",
     "She sells seashells by the seashore; the shells she sells are surely seashells.",
@@ -53,7 +53,6 @@ def main():
     parser.add_argument("--threads", type=int, default=4)
     args = parser.parse_args()
     torch.set_num_threads(args.threads)
-    match_frontend(args.checkpoint)
     model = load_model(args.checkpoint, "cpu")
     wrapper = Exportable(model, external_noise=True).eval()
     exact = session(args.onnx, args.threads)

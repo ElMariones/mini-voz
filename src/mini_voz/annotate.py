@@ -1,6 +1,6 @@
 """Versioned annotation layer: phoneme tokens and validated durations.
 
-Cloud only. Reads the existing acoustic feature files (wave, mel, pitch); their
+Reads the existing acoustic feature files (wave, mel, pitch); their
 byte tokens are stale and ignored. Writes a NEW directory and never modifies the
 feature files or the source dataset:
 
@@ -28,17 +28,21 @@ import torch
 
 from .align import ALIGNER_MODEL, AlignmentSettings, PhoneRecognizer, align_utterance
 from .config import ANNOTATION_VERSION, Config
+from .device import is_cuda, pick_device
+from .device import is_cuda, pick_device
+from .device import is_cuda, pick_device
+from .device import is_cuda, pick_device
 from .journal import append, atomic_json, file_hash, recover
 from .text import (PHONE_SET, SYMBOL_TO_ID, UNK, VOICELESS, VOWEL_SET, Phonemized, frontend_fingerprint,
                    frontend_identity, frontend_runtime, phonemize)
 
 SPLITS = ("train", "validation", "test")
-FRICATIVES = frozenset(("f", "θ", "s", "ʃ"))
+FRICATIVES = frozenset(("f", "θ", "s", "x", "ʃ"))
 
 
 def load_acoustic_rows(features, split, config):
     metadata = features / (split + ".preparation.json")
-    if not metadata.exists() or not json.loads(metadata.read_text()).get("complete"):
+    if not metadata.exists() or not json.loads(metadata.read_text(encoding="utf-8")).get("complete"):
         raise ValueError(f"acoustic preparation for {split} is missing or incomplete")
     rows = [json.loads(line) for line in (features / (split + ".jsonl")).read_text(encoding="utf-8").split("\n") if line.strip()]
     for row in rows:
@@ -141,9 +145,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--features", type=Path, required=True, help="Directory with <split>.jsonl acoustic manifests")
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--dataset-revision", required=True)
+    parser.add_argument("--dataset-revision", default="local", help="A name for this version of the recordings; it is recorded with the annotations")
     parser.add_argument("--config", type=Path)
-    parser.add_argument("--device", default="cuda")
+    parser.add_argument("--device", default="auto", help="auto, cuda, mps or cpu")
+    parser.add_argument("--offline", action="store_true", help="Do not download the alignment model; use the local Hugging Face cache")
     parser.add_argument("--splits", nargs="+", default=list(SPLITS), choices=SPLITS)
     parser.add_argument("--limit", type=int, help="Annotate only the first N rows per split (smoke test; never complete)")
     parser.add_argument("--resume", action="store_true")
@@ -158,7 +163,8 @@ def main():
     parser.add_argument("--min-phones-per-second", type=float, default=4.0)
     parser.add_argument("--max-phones-per-second", type=float, default=30.0)
     args = parser.parse_args()
-    config = Config.from_dict(json.loads(args.config.read_text())) if args.config else Config()
+    args.device = pick_device(args.device)
+    config = Config.from_dict(json.loads(args.config.read_text(encoding="utf-8"))) if args.config else Config()
     settings = AlignmentSettings(min_pause_frames=args.min_pause_frames)
     limits = {key: getattr(args, key) for key in ("max_weak_phone_fraction", "min_token_probability", "max_phone_frames",
                                                     "min_vowel_voiced", "min_phones_per_second", "max_phones_per_second")}
@@ -170,7 +176,7 @@ def main():
     rows = {split: load_acoustic_rows(args.features, split, config) for split in args.splits}
     if args.limit:
         rows = {split: value[:args.limit] for split, value in rows.items()}
-    recognizer = PhoneRecognizer(args.device)
+    recognizer = PhoneRecognizer(args.device, local_files_only=args.offline)
     identity = {
         "annotation_version": ANNOTATION_VERSION, "acoustic": config.acoustic_fingerprint, "frontend": frontend_fingerprint(),
         **frontend_runtime(), "aligner": {"model": ALIGNER_MODEL, "revision": recognizer.revision},
@@ -183,7 +189,7 @@ def main():
     if metadata_path.exists():
         if not args.resume:
             raise FileExistsError("annotation directory exists; use --resume or a new directory")
-        if json.loads(metadata_path.read_text())["identity"] != identity:
+        if json.loads(metadata_path.read_text(encoding="utf-8"))["identity"] != identity:
             raise ValueError("front end, aligner, settings or sources changed: these annotations are stale; use a new directory")
     atomic_json(metadata_path, {"identity": identity, "fingerprint": fingerprint, "complete": False})
     (args.output / "raw").mkdir(exist_ok=True)
@@ -222,7 +228,7 @@ def main():
                     log(f"aligned {split} {count}/{len(pending)}")
         raw[split] = done
     del recognizer
-    if args.device.startswith("cuda"):
+    if is_cuda(args.device):
         torch.cuda.empty_cache()
 
     # 2. Optional boundary refinement over all splits together.
@@ -251,7 +257,7 @@ def main():
                     stage[split][identifier] = value
                 for split in args.splits:
                     temporary = directory / (split + ".jsonl.tmp")
-                    temporary.write_text("".join(json.dumps({"id": k, "durations": v}) + "\n" for k, v in stage[split].items()))
+                    temporary.write_text("".join(json.dumps({"id": k, "durations": v}) + "\n" for k, v in stage[split].items()), encoding="utf-8")
                     temporary.replace(directory / (split + ".jsonl"))
                 stages[f"refined-{n + 1}"] = stage
             del items

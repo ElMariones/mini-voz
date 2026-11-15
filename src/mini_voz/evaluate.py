@@ -1,4 +1,4 @@
-"""Free-running evaluation of a checkpoint. Cloud only.
+"""Free-running evaluation of a checkpoint.
 
 For training sentences (memorisation), held-out sentences (generalisation) and
 new sentences that are in no split, synthesise speech from TEXT ALONE (predicted
@@ -26,29 +26,27 @@ import torch
 
 from .config import Config
 from .data import AnnotatedDataset
+from .device import pick_device
 from .infer import load_model, speak
 from .losses import SpectralLoss
 from .text import phonemize
 
 NOVEL_SENTENCES = (
-    "The quick brown fox jumps over the lazy dog near the quiet river.",
-    "Please remember to call your grandmother before the weekend starts.",
-    "How many people are coming to the conference in September?",
-    "I can't believe it's already half past nine; we should leave now!",
-    "Tiny voca is a small text to speech model trained from scratch.",
-    "After the storm passed, the mountain air felt fresh, clear, and surprisingly warm.",
-    "Could you send me the report by Friday afternoon, please?",
-    "She sells seashells by the seashore, and the shells she sells are surely seashells.",
+    "El veloz murciélago hindú comía feliz cardillo y kiwi mientras la cigüeña tocaba el saxofón.",
+    "Por favor, acuérdate de llamar a tu abuela antes de que empiece el fin de semana.",
+    "¿Cuántas personas van a venir al congreso de septiembre?",
+    "¡No me puedo creer que ya sean las nueve y media; deberíamos irnos ahora mismo!",
+    "Mini voz es un modelo pequeño de síntesis de voz entrenado desde cero.",
+    "Cuando pasó la tormenta, el aire de la montaña se sentía fresco, limpio y sorprendentemente cálido.",
+    "¿Podrías enviarme el informe antes del viernes por la tarde, por favor?",
+    "Tres tristes tigres tragaban trigo en un trigal, y el perro de San Roque no tiene rabo.",
 )
 SEMITONES = 12 / np.log(2)
 
 
 def normalizer():
-    try:
-        from transformers.models.whisper.english_normalizer import EnglishTextNormalizer
-        return EnglishTextNormalizer({})
-    except Exception:
-        return lambda text: re.sub(r"\s+", " ", re.sub(r"[^a-z0-9' ]", " ", text.lower())).strip()
+    """Lower case, no punctuation; accents and ñ are kept, they are letters."""
+    return lambda text: re.sub(r"\s+", " ", re.sub(r"[^a-z0-9áéíóúüñ ]", " ", text.lower())).strip()
 
 
 def spread(indices, lengths, count):
@@ -84,13 +82,13 @@ def main():
     parser.add_argument("--checkpoint", type=Path, required=True)
     parser.add_argument("--annotations", type=Path, required=True, help="Directory with train/validation/test.jsonl")
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--tag", required=True)
+    parser.add_argument("--tag", default="eval")
     parser.add_argument("--splits", nargs="+", default=["train", "validation", "test"])
     parser.add_argument("--train-subset", type=int, help="Restrict 'train' examples to the first N balanced rows (the --subset used in training)")
     parser.add_argument("--per-voice", type=int, default=4)
     parser.add_argument("--novel", type=int, default=len(NOVEL_SENTENCES))
-    parser.add_argument("--device", default="cuda")
-    parser.add_argument("--asr-model", default="small.en")
+    parser.add_argument("--device", default="auto", help="auto, cuda, mps or cpu")
+    parser.add_argument("--asr-model", default="small", help="A multilingual faster-whisper model")
     parser.add_argument("--no-asr", action="store_true")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--speed", type=float, default=1.0)
@@ -98,7 +96,7 @@ def main():
     args = parser.parse_args()
     import soundfile as sf
     from .train import balanced_indices
-    model = load_model(args.checkpoint, args.device)
+    model = load_model(args.checkpoint, pick_device(args.device))
     c = model.config
     checkpoint_step = torch.load(args.checkpoint, map_location="cpu", weights_only=True)["step"]
     spectral = SpectralLoss(c.sample_rate)
@@ -177,7 +175,7 @@ def main():
             audio, rate = sf.read(path, dtype="float32")
             factor = int(np.gcd(rate, 16000))      # the ASR model expects 16 kHz samples
             audio = resample_poly(audio, 16000 // factor, rate // factor).astype(np.float32)
-            segments, _ = asr.transcribe(audio, language="en", beam_size=5, condition_on_previous_text=False, temperature=0.0)
+            segments, _ = asr.transcribe(audio, language="es", beam_size=5, condition_on_previous_text=False, temperature=0.0)
             return " ".join(segment.text.strip() for segment in segments).strip()
         for record in samples:
             truth = normalize(record["text"])

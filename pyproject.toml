@@ -3,31 +3,44 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "tiny-voca"
-version = "0.2.0"
-description = "A 4.5M-parameter two-voice English text-to-speech model trained from scratch"
+name = "mini-voz"
+version = "0.1.0"
+description = "A small Spanish text-to-speech model trained from scratch (4.5M parameters). Based on tiny-voca."
 readme = "README.md"
-authors = [{ name = "Muhammed Nazeem" }]
+authors = [{ name = "mini-voz contributors" }, { name = "Muhammed Nazeem (tiny-voca, the original project)" }]
 license = { text = "Apache-2.0" }
-requires-python = ">=3.10"
-dependencies = ["torch>=2.4,<3", "numpy>=1.24,<3", "soundfile>=0.12,<1"]
+requires-python = ">=3.10,<3.13"
+dependencies = ["torch>=2.4,<2.9", "numpy>=1.24,<3", "soundfile>=0.12,<1"]
 
 [project.optional-dependencies]
-# The "own" front end: text to phonemes without eSpeak.
-own = ["dizione @ git+https://github.com/n4ze3m/dizione"]
-prepare = ["librosa>=0.10.2,<1", "pyarrow>=15", "huggingface-hub>=0.34,<2"]
+# Acoustic features and the manifest builder for your own recordings.
+prepare = ["librosa>=0.10.2,<1", "pyarrow>=15", "huggingface-hub>=0.34,<2", "scipy>=1.10,<2"]
 # Annotation only: the pretrained phoneme recogniser used for forced alignment.
-annotate = ["transformers>=4.40,<5", "torchaudio>=2.1,<3", "scipy>=1.10,<2", "huggingface-hub>=0.34,<2"]
+annotate = ["transformers>=4.40,<5", "torchaudio>=2.4,<2.9", "scipy>=1.10,<2", "huggingface-hub>=0.34,<2"]
 # Evaluation only: ASR scoring and comparison with recordings.
 evaluate = ["faster-whisper>=1.0,<2", "jiwer>=3,<5", "librosa>=0.10.2,<1", "scipy>=1.10,<2"]
+# ONNX export and its check.
+onnx = ["onnx>=1.16", "onnxruntime>=1.18", "onnxscript>=0.1"]
+# Everything needed to go from recordings to a trained, evaluated model.
+all = ["mini-voz[prepare,annotate,evaluate,onnx]"]
 
 [project.scripts]
-tiny-voca-prepare = "tiny_voca.prepare:main"
-tiny-voca-annotate = "tiny_voca.annotate:main"
-tiny-voca-train = "tiny_voca.train:main"
-tiny-voca-evaluate = "tiny_voca.evaluate:main"
-tiny-voca-speak = "tiny_voca.infer:main"
-tiny-voca-inspect = "tiny_voca.inspect:main"
+mini-voz-prepare = "mini_voz.prepare:main"
+mini-voz-annotate = "mini_voz.annotate:main"
+mini-voz-train = "mini_voz.train:main"
+mini-voz-evaluate = "mini_voz.evaluate:main"
+mini-voz-speak = "mini_voz.infer:main"
+mini-voz-inspect = "mini_voz.inspect:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+# uv: CUDA builds of PyTorch on Windows and Linux, the standard build (with MPS) on macOS.
+[tool.uv.sources]
+torch = [{ index = "pytorch-cuda", marker = "sys_platform == 'win32' or sys_platform == 'linux'" }]
+torchaudio = [{ index = "pytorch-cuda", marker = "sys_platform == 'win32' or sys_platform == 'linux'" }]
+
+[[tool.uv.index]]
+name = "pytorch-cuda"
+url = "https://download.pytorch.org/whl/cu126"
+explicit = true

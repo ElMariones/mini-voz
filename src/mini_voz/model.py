@@ -1,4 +1,4 @@
-"""tiny-voca v2: feed-forward transformer with a pitch-driven source-filter head.
+"""mini-voz v2: feed-forward transformer with a pitch-driven source-filter head.
 
 All weights start random. Tensor conventions: hidden [B,T,C], frame features
 [B,T], waveform [B,S]. Acoustic frame i is centred on sample ``i * hop``.
@@ -123,6 +123,18 @@ def pulse_train(f0, sample_rate, hop, limit=0.47, phase=None):
     sin((K+1/2)x) / (2 sin(x/2)) - 1/2; the top harmonic fades in and out so the
     signal stays continuous while the pitch glides. Float64 keeps the phase exact.
     """
+    if f0.device.type == "mps":
+        # Apple's GPU has no float64: compute the phase on the CPU and move the result back.
+        return pulse_train(f0.cpu(), sample_rate, hop, limit, None if phase is None else phase.cpu()).to(f0.device)
+    if f0.device.type == "mps":
+        # Apple's GPU has no float64: compute the phase on the CPU and move the result back.
+        return pulse_train(f0.cpu(), sample_rate, hop, limit, None if phase is None else phase.cpu()).to(f0.device)
+    if f0.device.type == "mps":
+        # Apple's GPU has no float64: compute the phase on the CPU and move the result back.
+        return pulse_train(f0.cpu(), sample_rate, hop, limit, None if phase is None else phase.cpu()).to(f0.device)
+    if f0.device.type == "mps":
+        # Apple's GPU has no float64: compute the phase on the CPU and move the result back.
+        return pulse_train(f0.cpu(), sample_rate, hop, limit, None if phase is None else phase.cpu()).to(f0.device)
     frames = f0.shape[1]
     knots = torch.log(f0.double().clamp_min(1.0))
     knots = torch.cat((knots, knots[:, -1:]), dim=1)
@@ -238,7 +250,7 @@ class SourceFilter(nn.Module):
             return wave * audible
 
 
-class TinyVoca(nn.Module):
+class MiniVoz(nn.Module):
     def __init__(self, config=Config()):
         super().__init__()
         self.config = c = config

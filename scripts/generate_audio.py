@@ -8,7 +8,7 @@ uploaded from here (no token on the machine), and it stops at a budget deadline.
 
 Resumable: every clip is recorded in a SQLite file; rerun the same command.
 Output: <root>/audio/<id>.flac and <root>/manifest.jsonl (accepted clips, in the
-JSONL form tiny_voca.prepare reads), <root>/review.jsonl (rejected clips).
+JSONL form mini_voz.prepare reads), <root>/review.jsonl (rejected clips).
 """
 
 import argparse
@@ -50,7 +50,7 @@ def main():
     rows = [json.loads(line) for line in args.scripts.read_text(encoding="utf-8").splitlines() if line.strip()]
     rows = sorted(rows, key=lambda r: (r["character_count"], r["id"]))[:args.limit]
     jobs = [{"id": f"{row['id']}_{voice}", "voice": voice, "row": row} for row in rows for voice in ("F2", "M2")]
-    references = json.loads(args.voices.read_text())
+    references = json.loads(args.voices.read_text(encoding="utf-8"))
     started = time.time()
 
     def out_of_time():
@@ -59,7 +59,7 @@ def main():
         if not args.deadline_file:
             return False
         try:
-            return time.time() >= json.loads(args.deadline_file.read_text())["deadline"] - args.deadline_margin
+            return time.time() >= json.loads(args.deadline_file.read_text(encoding="utf-8"))["deadline"] - args.deadline_margin
         except (OSError, ValueError, KeyError):
             return False
 
@@ -69,7 +69,7 @@ def main():
         value = {"stage": stage, "target_clips": len(jobs), "counts": counts, "accepted_audio_hours": round(hours, 3),
                  "elapsed_seconds_this_run": round(time.time() - started), "updated": time.time()}
         temporary = args.root / "progress.json.tmp"
-        temporary.write_text(json.dumps(value, indent=2))
+        temporary.write_text(json.dumps(value, indent=2), encoding="utf-8")
         os.replace(temporary, args.root / "progress.json")
         print(json.dumps(value), flush=True)
 

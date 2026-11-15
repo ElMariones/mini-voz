@@ -1,7 +1,7 @@
 """Training data: acoustic feature files joined with the annotation layer.
 
 Tokens, stress and durations come ONLY from an annotation manifest written by
-``tiny_voca.annotate``. The ``tokens`` tensor inside a feature file is a stale
+``mini_voz.annotate``. The ``tokens`` tensor inside a feature file is a stale
 byte encoding from the old front end and is never read here.
 """
 
@@ -50,8 +50,8 @@ class AnnotatedDataset:
         self.manifest = Path(manifest)
         metadata_path = self.manifest.parent / "annotations.json"
         if not metadata_path.exists():
-            raise ValueError("not an annotation manifest (legacy byte-token manifests are stale): run tiny_voca.annotate")
-        metadata = json.loads(metadata_path.read_text())
+            raise ValueError("not an annotation manifest (legacy byte-token manifests are stale): run mini_voz.annotate")
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
         if not metadata.get("complete"):
             raise ValueError("annotation run is incomplete; finish it with --resume before training")
         self.annotation = metadata["fingerprint"]

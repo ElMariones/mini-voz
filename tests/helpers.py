@@ -6,8 +6,8 @@ import math
 from pathlib import Path
 import torch
 
-from tiny_voca.config import Config
-from tiny_voca.text import SYMBOL_TO_ID, frontend_fingerprint
+from mini_voz.config import Config
+from mini_voz.text import SYMBOL_TO_ID, frontend_fingerprint
 
 
 def small_config():
@@ -15,7 +15,7 @@ def small_config():
                   predictor_channels=16, cep_causal=12, cep_anti=4, noise_cep=8, max_frames=400)
 
 
-SYMBOLS = ("<bos>", "h", "ə", "l", "oʊ", "<sp>", "w", "ɜː", "l", "d", ".", "<eos>")
+SYMBOLS = ("<bos>", "x", "e", "l", "o", "<sp>", "w", "e", "l", "d", ".", "<eos>")
 STRESS = (0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0)
 
 

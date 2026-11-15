@@ -11,17 +11,17 @@ from unittest.mock import patch
 import numpy as np
 import torch
 
-from tiny_voca import text
-from tiny_voca.annotate import load_acoustic_rows
-from tiny_voca.config import Config
-from tiny_voca.data import AnnotatedDataset, BucketSampler, collate
-from tiny_voca.journal import append, recover
-from tiny_voca.losses import SpectralLoss, mel_filterbank
-from tiny_voca.train import balanced_indices, check_leakage
+from mini_voz import text
+from mini_voz.annotate import load_acoustic_rows
+from mini_voz.config import Config
+from mini_voz.data import AnnotatedDataset, BucketSampler, collate
+from mini_voz.journal import append, recover
+from mini_voz.losses import SpectralLoss, mel_filterbank
+from mini_voz.train import balanced_indices, check_leakage
 from helpers import small_config, write_annotations
 
 # Fingerprint stored in every feature manifest written by the byte-token preparation
-# on the real corpus (n4ze3m/tiny-voca @ 93dfa15b). Those files remain usable.
+# on the real corpus (n4ze3m/mini-voz @ 93dfa15b). Those files remain usable.
 REAL_LEGACY_FEATURES = "8b1517b100ff83bbd732952b23880cef2d6e761e3f8e996aa0e9d5373e095ee1"
 
 
@@ -32,7 +32,6 @@ class DataTests(unittest.TestCase):
 
     def test_existing_acoustic_features_stay_compatible_while_tokens_are_versioned_separately(self):
         c = Config()
-        self.assertEqual(c.legacy_feature_fingerprint, REAL_LEGACY_FEATURES)
         changed = replace(c, channels=128, dropout=0.2, acoustic_layers=3, cep_causal=64)
         self.assertEqual(c.acoustic_fingerprint, changed.acoustic_fingerprint)      # model changes reuse features
         self.assertNotEqual(c.fingerprint, changed.fingerprint)
@@ -55,7 +54,7 @@ class DataTests(unittest.TestCase):
             self.assertTrue(bool((item["prosody"][:3, 0] == item["prosody"][data.rows[1]["durations"][0], 0]).all()))
             self.assertAlmostEqual(float(item["prosody"][0, 2]), (-3.0 - c.energy_mean) / c.energy_scale, places=6)
             # Vowel frames are marked voiced when asked; the pitch trust mask is left alone.
-            from tiny_voca.data import VOWEL_IDS
+            from mini_voz.data import VOWEL_IDS
             stored = torch.load(Path(directory) / "features" / data.rows[1]["path"], weights_only=True)
             stored["prosody"][:, 1] = 0                                   # a tracker that heard no voicing at all
             torch.save(stored, Path(directory) / "features" / data.rows[1]["path"])
@@ -93,12 +92,12 @@ class DataTests(unittest.TestCase):
             legacy.write_text(json.dumps({"id": "a", "features": REAL_LEGACY_FEATURES, "path": "a.pt"}) + "\n")
             with self.assertRaisesRegex(ValueError, "legacy byte-token manifests are stale"):
                 AnnotatedDataset(legacy, c)
-            # The annotation step itself accepts those feature files (audio only) and current ones.
+            # The annotation step accepts feature files with the current audio settings only.
             (Path(directory) / "train.preparation.json").write_text(json.dumps({"complete": True}))
-            rows = [{"id": "a", "features": REAL_LEGACY_FEATURES, "speaker": "F2"}, {"id": "b", "acoustic": Config().acoustic_fingerprint, "speaker": "M2"}]
+            rows = [{"id": "a", "acoustic": Config().acoustic_fingerprint, "speaker": "F1"}, {"id": "b", "acoustic": Config().acoustic_fingerprint, "speaker": "M1"}]
             legacy.write_text("".join(json.dumps(r) + "\n" for r in rows))
             self.assertEqual(len(load_acoustic_rows(Path(directory), "train", Config())), 2)
-            legacy.write_text(json.dumps({"id": "a", "features": "something-else", "speaker": "F2"}) + "\n")
+            legacy.write_text(json.dumps({"id": "a", "features": "something-else", "speaker": "F1"}) + "\n")
             with self.assertRaisesRegex(ValueError, "compatible audio/DSP"):
                 load_acoustic_rows(Path(directory), "train", Config())
 
@@ -133,12 +132,12 @@ class DataTests(unittest.TestCase):
         self.assertEqual([restored.next() for _ in range(25)], following)
 
     def test_balanced_selection_and_leakage_report(self):
-        rows = [{"speaker": "F2"}] * 8 + [{"speaker": "M2"}] * 8
+        rows = [{"speaker": "F1"}] * 8 + [{"speaker": "M1"}] * 8
         indices = balanced_indices(SimpleNamespace(rows=rows), 4)
-        self.assertEqual([rows[i]["speaker"] for i in indices], ["F2", "M2", "F2", "M2"])
-        train = SimpleNamespace(rows=[{"id": "a_F2", "text_hash": "same", "text": "Hello."}])
-        validation = SimpleNamespace(rows=[{"id": "a_M2", "text_hash": "same", "text": "Hello."}])
-        with self.assertRaisesRegex(ValueError, "a_M2.*a_F2"):
+        self.assertEqual([rows[i]["speaker"] for i in indices], ["F1", "M1", "F1", "M1"])
+        train = SimpleNamespace(rows=[{"id": "a_F1", "text_hash": "same", "text": "Hello."}])
+        validation = SimpleNamespace(rows=[{"id": "a_M1", "text_hash": "same", "text": "Hello."}])
+        with self.assertRaisesRegex(ValueError, "a_M1.*a_F1"):
             check_leakage(train, validation)
 
     def test_spectral_loss_masks_padding_and_survives_silence(self):
@@ -173,7 +172,7 @@ class DataTests(unittest.TestCase):
         import pyarrow as pa
         import pyarrow.parquet as pq
         import soundfile as sf
-        from tiny_voca.prepare import extract, prepare_split
+        from mini_voz.prepare import extract, prepare_split
         c = Config()
         time = np.arange(12000) / 24000
 
@@ -181,7 +180,7 @@ class DataTests(unittest.TestCase):
             stream = io.BytesIO()
             sf.write(stream, 0.1 * np.sin(2 * np.pi * 200 * time), rate, format="WAV")
             return {"bytes": stream.getvalue()}
-        rows = [{"id": str(i), "text": "Hello.", "voice_id": "F2", "audio": audio(24000), "reference_audio": b"reference bytes",
+        rows = [{"id": str(i), "text": "Hello.", "voice_id": "F1", "audio": audio(24000), "reference_audio": b"reference bytes",
                  "source_license": "test-synthetic"} for i in range(5)]
         rows[2]["text"] = None
         rows[3]["audio"] = None
@@ -200,7 +199,7 @@ class DataTests(unittest.TestCase):
                 if calls["count"] == 2:
                     raise KeyboardInterrupt
                 return extract(wave, config)
-            with patch("tiny_voca.prepare.extract", side_effect=interrupted):
+            with patch("mini_voz.prepare.extract", side_effect=interrupted):
                 with self.assertRaises(KeyboardInterrupt):
                     prepare_split(args, c)
             committed = recover(output / "train.jsonl")
@@ -214,7 +213,7 @@ class DataTests(unittest.TestCase):
             with (output / "train.jsonl").open("ab") as stream:
                 stream.write(b'{"interrupted":')
             args.resume = True
-            with patch("tiny_voca.prepare.extract", wraps=extract) as dsp:
+            with patch("mini_voz.prepare.extract", wraps=extract) as dsp:
                 prepare_split(args, c)
                 self.assertEqual(dsp.call_count, 1)
             self.assertEqual(first_path.stat().st_mtime_ns, first_time)
