@@ -1,4 +1,4 @@
-"""mini-voz: a small two-voice TTS trained from scratch.
+"""mini-voz: a small Spanish TTS trained from scratch (a Spanish adaptation of tiny-voca).
 
 The speech model loads no pretrained weights. A pretrained phoneme recogniser
 is used only by the annotation step, and an ASR model only by evaluation.

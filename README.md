@@ -1,123 +1,264 @@
 # mini-voz
 
-mini-voz is a small English text-to-speech model. It has two voices, 4.5M
-parameters, and runs on a CPU or in the browser.
+mini-voz is a small Spanish text-to-speech model: 4.5M parameters, 18 MB, fast
+enough to run on a CPU. It is trained from scratch on your own data.
 
-[Demo](https://mini-voz.n4ze3m.com) · [Weights](https://huggingface.co/n4ze3m/mini-voz) · [Dataset](https://huggingface.co/datasets/n4ze3m/mini-voz)
+It is a Spanish adaptation of [tiny-voca](https://github.com/n4ze3m/tiny-voca)
+by Muhammed Nazeem: same model and training recipe, a Spanish text front end,
+and a pipeline that runs on Windows, macOS and Linux.
+
+**Status: the code is ready and tested end to end, but no model has been
+trained yet.** There are no weights to download. Figures below marked
+"tiny-voca" are those of the original English model, which has the same
+architecture.
 
 ## Features
 
-- **Small**: 4,537,291 parameters, 18 MB, waveform generator included.
-- **Fast**: about 70x real time on four CPU threads.
-- **Two voices**: F2 (female) and M2 (male), American English, 24 kHz.
-- **Runs anywhere**: PyTorch, ONNX Runtime, and ONNX Runtime Web.
-- **Open**: code, weights, training recipe and dataset. Trained from scratch.
+- **Small**: 4,533,451 parameters, waveform generator included.
+- **Fast**: tiny-voca runs about 70x real time on four CPU threads.
+- **Spanish**: Castilian (`es`, the default) or Latin American (`es-419`)
+  pronunciation. `¿` and `¡` are tokens, so the model knows a question from its
+  first word.
+- **Two voices** by default (`F1`, `M1`), 24 kHz. Names and count are configurable.
+- **Runs anywhere**: PyTorch and ONNX Runtime.
+
+## Which machine to train on
+
+| Machine | Device | Training time |
+|---|---|---|
+| PC with an NVIDIA GPU | `cuda` | tiny-voca took 7.7 h on an RTX 4090. An RTX 4070 Ti SUPER should need roughly 11 to 13 h (estimate, not measured). |
+| MacBook Pro (Apple Silicon) | `mps` | Supported in the code but **not tested**, and expected to be several times slower. |
+
+Use the NVIDIA PC for training. Making synthetic training audio (route B
+below) also needs the NVIDIA GPU. The Mac is fine for everything else:
+preparing recordings, speaking with a trained model, running tests.
+
+Every command picks the device by itself (`--device auto`).
 
 ## Install
 
+You need [uv](https://docs.astral.sh/uv/), eSpeak NG and ffmpeg.
+
+Windows:
+
 ```bash
-git clone https://github.com/n4ze3m/mini-voz.git
-cd mini-voz
-pip install -e ".[own]"
-hf download n4ze3m/mini-voz --local-dir weights
-export DIZIONE_DATA=weights/phonemizer
+winget install eSpeak-NG.eSpeak-NG
 ```
+
+macOS:
+
+```bash
+brew install espeak-ng ffmpeg
+```
+
+Then, on either:
+
+```bash
+git clone https://github.com/ElMariones/mini-voz.git
+```
+
+```bash
+cd mini-voz
+```
+
+```bash
+uv sync --extra all
+```
+
+`uv sync` creates `.venv` with Python 3.11 and the right PyTorch build (CUDA
+on Windows and Linux, MPS on macOS). Run commands with `uv run`.
+
+On a Mac, also set this once per terminal, so operations the Apple GPU lacks
+fall back to the CPU:
+
+```bash
+export PYTORCH_ENABLE_MPS_FALLBACK=1
+```
+
+For Latin American pronunciation, set `MINI_VOZ_ACCENT=es-419` for **every**
+step: annotation, training and speaking must agree.
+
+## Data
+
+The model needs about 8 to 10 hours of clean speech per voice, with the exact
+text of every clip. tiny-voca used 17.6 hours for two voices. There are two
+ways to get it.
+
+### Route A: your own recordings
+
+Put the clips of one voice in a folder, with a `metadata.csv` of `file|text`
+lines (or a `.txt` next to every audio file):
+
+```
+grabaciones/F1/metadata.csv
+grabaciones/F1/clip0001.wav
+grabaciones/F1/clip0002.wav
+```
+
+```
+clip0001|¿Has visto dónde dejé las llaves del coche?
+clip0002|El tren a Zaragoza sale a las nueve y media.
+```
+
+One sentence per clip, 1 to 20 seconds, one speaker, the same microphone and
+room throughout, no music or noise. Any sample rate and format: it is
+converted to 24 kHz mono.
+
+```bash
+uv run python scripts/build_manifest.py --voice F1 --recordings grabaciones/F1 --output data
+```
+
+Run it again with `--voice M1` for the second voice.
+
+### Route B: synthetic voices (what tiny-voca did)
+
+No recording of a real person. A large TTS model (Qwen3-TTS) invents a voice
+from a description, or clones a 10 to 20 second reference clip, and reads
+thousands of sentences. It needs the NVIDIA GPU and
+`uv sync --extra all --extra synthetic`.
+
+```bash
+uv run python scripts/design_voice.py --voice F1 --output voices --describe "Mujer de unos treinta y cinco años, voz cálida y clara, acento castellano neutro."
+```
+
+```bash
+uv run python scripts/design_voice.py --voice F1 --output voices --choose 2
+```
+
+```bash
+uv run python scripts/build_text.py --sentences frases/*.txt --count 9000 --output data/scripts.jsonl
+```
+
+```bash
+uv run python scripts/generate_audio.py --scripts data/scripts.jsonl --voices voices/voices.json --root data
+```
+
+`frases/*.txt` are plain text files with one Spanish sentence per line, for
+example the CC0 sentence files of
+[Mozilla Common Voice](https://github.com/common-voice/common-voice/tree/main/server/data/es).
+To clone a real voice instead of designing one, see the notes at the top of
+`scripts/design_voice.py`. Only clone a voice you have permission to use.
+
+`design_voice.py` and `generate_audio.py` are adapted to Spanish but have
+**not been run yet**: the Qwen3-TTS models were not downloaded while setting
+this up.
+
+## Training
+
+Both routes leave `data/train.jsonl`, `data/validation.jsonl` and
+`data/test.jsonl`. From there:
+
+```bash
+uv run python -m mini_voz.prepare --inputs data/train.jsonl --split train --output features
+```
+
+```bash
+uv run python -m mini_voz.prepare --inputs data/validation.jsonl --split validation --output features
+```
+
+```bash
+uv run python -m mini_voz.prepare --inputs data/test.jsonl --split test --output features
+```
+
+```bash
+uv run python -m mini_voz.annotate --features features --output annotations
+```
+
+```bash
+uv run python -m mini_voz.train --train annotations/train.jsonl --validation annotations/validation.jsonl --output runs/v1 --steps 104000 --gan-start 8000 --gan-ratio 0.7 --teacher-final 0
+```
+
+```bash
+uv run python -m mini_voz.evaluate --checkpoint runs/v1/inference.pt --annotations annotations --output eval/v1
+```
+
+- `prepare` computes the spectrogram and pitch of every clip. It runs on the
+  CPU and is slow: the pitch tracker takes a few seconds per clip.
+- `annotate` finds how long every phoneme lasts with a pretrained recogniser
+  (downloaded once, 1.2 GB) and rejects clips whose audio and text do not
+  match. Read `annotations/summary.json` before training.
+- `train` saves `runs/v1/last.pt` every 1,000 steps. To stop it cleanly, pass
+  `--stop-file runs/STOP` and create that file. Continue with the same command
+  plus `--resume runs/v1/last.pt`. `runs/v1/inference.pt` is the model to
+  speak with.
+
+To use other voice names or a different number of voices, pass a JSON file
+with the full configuration to every step with `--config`. `config.json` in
+any run folder has the form.
 
 ## Usage
 
 ```bash
-python -m mini_voz.infer \
-  --checkpoint weights/mini-voz.pt \
-  --voice F2 \
-  --text "Hello! This is mini voz." \
-  --output hello.wav
+uv run python -m mini_voz.infer --checkpoint runs/v1/inference.pt --voice F1 --text "¡Hola! Esto es mini voz." --output hola.wav
 ```
 
 | Option | Default | Meaning |
 |---|---|---|
 | `--text-file` | | Read the text from a file instead of `--text` |
-| `--voice` | `F2` | `F2` or `M2` |
+| `--voice` | the first voice | One of the voices the model was trained with |
 | `--speed` | 1.0 | Speaking rate |
 | `--pitch-shift` | 0 | Raise or lower the pitch |
 | `--pitch-range` | 1.0 | More or less pitch movement |
 
 Long text is fine. It is read one sentence at a time and the audio is joined.
-A text that ends without a mark gets a full stop, so the last word does not
-break off. A sentence with nothing to read, such as one in another script, is
-skipped. The output never peaks above 0.99, so it does not clip as a 16-bit
-WAV. In Python, `mini_voz.infer.speak_text` does the same.
+A text that ends without a mark gets a full stop. Numbers, times and common
+abbreviations (`Sr.`, `Dra.`, `EE.UU.`) are read out by eSpeak NG. In Python,
+`mini_voz.infer.speak_text` does the same.
 
 ## ONNX
 
 ```bash
-python -m mini_voz.export --checkpoint weights/mini-voz.pt --output mini-voz.onnx
+uv run python -m mini_voz.export --checkpoint runs/v1/inference.pt --output mini-voz.onnx
 ```
-
-A ready file is in the weights repository as `onnx/model.onnx`. The
-[model card](https://huggingface.co/n4ze3m/mini-voz) shows how to call it.
-
-## Web demo
-
-The [demo](https://mini-voz.n4ze3m.com) runs the model in the browser. It
-plays each sentence as soon as it is made, and keeps the whole clip in the
-player. Its source is in `web/`.
-
-```bash
-cd web
-bash fetch_assets.sh /path/to/dizione
-npx wrangler dev
-```
-
-## Training
-
-```bash
-export MINI_VOZ_FRONTEND=own
-python -m mini_voz.prepare --inputs data/train-*.parquet --split train --output features
-python -m mini_voz.annotate --features features --output annotations
-python -m mini_voz.train --train annotations/train.jsonl --validation annotations/validation.jsonl \
-  --output runs/NAME --steps 104000 --gan-start 8000 --gan-ratio 0.7 --teacher-final 0
-python -m mini_voz.evaluate --checkpoint runs/NAME/inference.pt --annotations annotations --output eval/NAME
-```
-
-The released weights took 7.7 hours on one RTX 4090. More about the model and
-the data is in [docs/model.md](docs/model.md).
 
 ## Tests
 
+Windows (Git Bash):
+
 ```bash
-PYTHONPATH=src:tests python -m unittest discover -s tests
+PYTHONPATH="src;tests" uv run python -m unittest discover -s tests
+```
+
+macOS and Linux:
+
+```bash
+PYTHONPATH=src:tests uv run python -m unittest discover -s tests
 ```
 
 ## Limits
 
-- English only. Two fixed voices. No voice cloning.
-- The F2 voice sounds younger than intended. A more mature voice is planned.
-- Foreign names and odd spellings are often read wrong.
-- No streaming yet.
+- Spanish only. Fixed voices. No voice cloning at inference time.
+- Pronunciation comes from eSpeak NG, so foreign names are read with Spanish
+  rules, and eSpeak NG (GPL-3.0) must be installed wherever the model speaks.
+- No browser demo: tiny-voca's demo depends on an English-only phonemizer and
+  was removed.
+- No streaming.
 
-## Cost
+## Changes from tiny-voca
 
-The whole project cost $9.56 of GPU time on one rented RTX 4090. That is the
-dataset, the failed tries and the final training run.
+- Package renamed to `mini_voz`. Spanish phoneme inventory (56 symbols) and
+  text handling. The English `dizione` front end and the web demo are removed.
+- Automatic device choice (CUDA, MPS, CPU). Windows support: file locking,
+  UTF-8 everywhere, eSpeak NG found in its default install folder.
+- New `scripts/build_manifest.py`, `scripts/build_text.py` and
+  `scripts/design_voice.py`. `scripts/generate_audio.py` adapted to Spanish.
+- Training has no time limit by default (it was one hour per run).
 
-![Cost breakdown](docs/cost.png)
-
-## Support
-
-It cost less than a pizza to make. If you like it, you can buy me one:
-https://ko-fi.com/n4ze3m
+More about the model is in [docs/model.md](docs/model.md).
 
 ## License
 
-Apache-2.0 for code and weights. CC BY 4.0 for the dataset.
+Apache-2.0, like tiny-voca. See [LICENSE](LICENSE).
 
-## Citation
+## Credits
+
+mini-voz is built on tiny-voca. If you use it, please cite the original:
 
 ```bibtex
 @software{nazeem2026tinyvoca,
   author = {Nazeem, Muhammed},
-  title  = {mini-voz: a 4.5M-parameter two-voice English text-to-speech model},
+  title  = {tiny-voca: a 4.5M-parameter two-voice English text-to-speech model},
   year   = {2026},
-  url    = {https://huggingface.co/n4ze3m/mini-voz}
+  url    = {https://huggingface.co/n4ze3m/tiny-voca}
 }
 ```

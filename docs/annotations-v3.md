@@ -1,5 +1,9 @@
 # mini-voz annotations v3: phoneme tokens and validated durations
 
+> The measurements in this document (boundary offsets, rejection counts, phone
+> lengths, voices F2 and M2) come from tiny-voca's original English dataset.
+> The format and the method are the same for mini-voz; the numbers will differ.
+
 Annotation layer for the recordings in this dataset at revision
 `93dfa15bf40ec278a3ea1b418294c5620d850a8f`. It adds, for every accepted
 recording, the phoneme token sequence and the number of acoustic frames each
@@ -25,7 +29,7 @@ Annotation fingerprint: `ebed758f71eb2af6d241a1badd9ee951ceb05e7605ad719507d7746
 
 ## How these annotations were made
 
-1. **Text to phonemes.** eSpeak NG 1.51, voice `en-us`, `--ipa --sep=_`, input
+1. **Text to phonemes.** eSpeak NG, voice `es` or `es-419`, `--ipa --sep=_`, input
    terminated by a newline. One token per eSpeak phoneme (59 phones), stress as
    a separate 0/1/2 feature, explicit tokens for utterance edges, word
    boundaries and punctuation. 76 symbols in total; no unknown phoneme occurs

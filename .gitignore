@@ -14,3 +14,10 @@ ops/
 web/public/assets/
 web/.wrangler/
 node_modules/
+features/
+annotations/
+eval/
+voices/
+grabaciones/
+frases/
+onnx-check/

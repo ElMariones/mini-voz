@@ -21,6 +21,8 @@ annotate = ["transformers>=4.40,<5", "torchaudio>=2.4,<2.9", "scipy>=1.10,<2", "
 evaluate = ["faster-whisper>=1.0,<2", "jiwer>=3,<5", "librosa>=0.10.2,<1", "scipy>=1.10,<2"]
 # ONNX export and its check.
 onnx = ["onnx>=1.16", "onnxruntime>=1.18", "onnxscript>=0.1"]
+# Optional: make the training recordings with a teacher TTS instead of recording them (NVIDIA GPU).
+synthetic = ["qwen-tts>=0.1.1", "faster-whisper>=1.0,<2", "jiwer>=3,<5", "scipy>=1.10,<2"]
 # Everything needed to go from recordings to a trained, evaluated model.
 all = ["mini-voz[prepare,annotate,evaluate,onnx]"]
 

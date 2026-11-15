@@ -21,7 +21,7 @@ from mini_voz.train import balanced_indices, check_leakage
 from helpers import small_config, write_annotations
 
 # Fingerprint stored in every feature manifest written by the byte-token preparation
-# on the real corpus (n4ze3m/mini-voz @ 93dfa15b). Those files remain usable.
+# on the real corpus (tiny-voca, n4ze3m/tiny-voca @ 93dfa15b). Those files remain usable.
 REAL_LEGACY_FEATURES = "8b1517b100ff83bbd732952b23880cef2d6e761e3f8e996aa0e9d5373e095ee1"
 
 
