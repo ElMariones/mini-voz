@@ -19,7 +19,7 @@ architecture.
 - **Spanish**: Castilian (`es`, the default) or Latin American (`es-419`)
   pronunciation. `¿` and `¡` are tokens, so the model knows a question from its
   first word.
-- **Two voices** by default (`F1`, `M1`), 24 kHz. Names and count are configurable.
+- **Four voices** by default: two female (`F1`, `F2`) and two male (`M1`, `M2`), 24 kHz. Names and count are configurable.
 - **Runs anywhere**: PyTorch and ONNX Runtime.
 
 ## Which machine to train on
@@ -108,7 +108,7 @@ converted to 24 kHz mono.
 uv run python scripts/build_manifest.py --voice F1 --recordings grabaciones/F1 --output data
 ```
 
-Run it again with `--voice M1` for the second voice.
+Run it again with `--voice F2`, `M1` and `M2` for the other voices.
 
 ### Route B: synthetic voices (what tiny-voca did)
 

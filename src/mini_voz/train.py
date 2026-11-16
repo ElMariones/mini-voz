@@ -18,10 +18,7 @@ from torch import nn
 from torch.nn import functional as F
 from .config import CHECKPOINT_FORMAT, Config
 from .data import AnnotatedDataset, BucketSampler, collate
-from .device import is_cuda, pick_device
-from .device import is_cuda, pick_device
-from .device import is_cuda, pick_device
-from .device import is_cuda, pick_device
+from .device import is_cuda, pick_device, stay_awake
 from .losses import Discriminators, SpectralLoss, discriminator_loss, generator_gan_loss, masked_mean
 from .model import MiniVoz
 from .text import frontend_fingerprint, frontend_identity
@@ -315,6 +312,7 @@ def main():
     parser.add_argument("--no-preload", action="store_true", help="Load feature files lazily instead of before the first step")
     args = parser.parse_args()
     args.device = pick_device(args.device)
+    stay_awake()
     if min(args.steps, args.batch_frames, args.max_batch, args.save_every, args.keep_every, args.log_every, args.crops, args.gan_ramp) < 1:
         parser.error("steps, batch limits and intervals must be positive")
     if args.max_seconds <= 0 or args.learning_rate <= 0 or args.lr_half_life <= 0 or not 0 <= args.teacher_final <= 1:

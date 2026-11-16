@@ -26,3 +26,15 @@ def pick_device(name="auto"):
 
 def is_cuda(device):
     return str(device).startswith("cuda")
+
+
+def stay_awake():
+    """Keep the computer from going to sleep while this process runs (Windows).
+
+    Long jobs die when the machine sleeps. This asks Windows to stay awake for
+    the life of the process only; no setting is changed. On macOS start the
+    command with ``caffeinate -i`` instead.
+    """
+    if os.name == "nt":
+        import ctypes
+        ctypes.windll.kernel32.SetThreadExecutionState(0x80000000 | 0x00000001)   # ES_CONTINUOUS | ES_SYSTEM_REQUIRED

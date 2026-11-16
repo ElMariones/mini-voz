@@ -47,6 +47,8 @@ def main():
     from faster_whisper import WhisperModel
     from jiwer import wer
     from qwen_tts import Qwen3TTSModel
+    from mini_voz.device import stay_awake
+    stay_awake()
     from scipy.signal import resample_poly
     import re
     audio = args.root / "audio"

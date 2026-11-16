@@ -19,7 +19,7 @@ class Config:
     n_mels: int = 80
     f0_min: float = 50.0
     f0_max: float = 600.0
-    speakers: tuple[str, ...] = ("F1", "M1")
+    speakers: tuple[str, ...] = ("F1", "F2", "M1", "M2")
     # Phoneme tokens from mini_voz.text.SYMBOLS.
     vocab_size: int = 56
     # Text encoder and frame-level transformer.
