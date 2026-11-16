@@ -7,10 +7,11 @@ It is a Spanish adaptation of [tiny-voca](https://github.com/n4ze3m/tiny-voca)
 by Muhammed Nazeem: same model and training recipe, a Spanish text front end,
 and a pipeline that runs on Windows, macOS and Linux.
 
-**Status: the code is ready and tested end to end, but no model has been
-trained yet.** There are no weights to download. Figures below marked
-"tiny-voca" are those of the original English model, which has the same
-architecture.
+**Status: a first model is trained** (104,000 steps, four synthetic voices, 27
+hours of audio, about 8 hours on an RTX 4070 Ti SUPER). The weights are not
+published in this repository yet; train your own with the steps below.
+Figures marked "tiny-voca" are those of the original English model, which has
+the same architecture.
 
 ## Features
 
@@ -197,7 +198,7 @@ any run folder has the form.
 ## How it improves while training
 
 The same text, spoken by every saved checkpoint of the first run
-(`runs/v1`, 104,000 steps planned). The text is: "¡Hola! Esto es mini voz, un
+(`runs/v1`, 104,000 steps). The text is: "¡Hola! Esto es mini voz, un
 modelo de voz pequeño que funciona en cualquier ordenador. ¿Qué tal suena? El
 tren a Zaragoza sale a las nueve y media, y hoy llueve en Valencia."
 
@@ -208,9 +209,25 @@ tren a Zaragoza sale a las nueve y media, y hoy llueve en Valencia."
 | 20,000 | [F1](docs/samples/020000/F1.mp3) | [F2](docs/samples/020000/F2.mp3) | [M1](docs/samples/020000/M1.mp3) | [M2](docs/samples/020000/M2.mp3) |
 | 30,000 | [F1](docs/samples/030000/F1.mp3) | [F2](docs/samples/030000/F2.mp3) | [M1](docs/samples/030000/M1.mp3) | [M2](docs/samples/030000/M2.mp3) |
 | 40,000 | [F1](docs/samples/040000/F1.mp3) | [F2](docs/samples/040000/F2.mp3) | [M1](docs/samples/040000/M1.mp3) | [M2](docs/samples/040000/M2.mp3) |
+| 50,000 | [F1](docs/samples/050000/F1.mp3) | [F2](docs/samples/050000/F2.mp3) | [M1](docs/samples/050000/M1.mp3) | [M2](docs/samples/050000/M2.mp3) |
+| 60,000 | [F1](docs/samples/060000/F1.mp3) | [F2](docs/samples/060000/F2.mp3) | [M1](docs/samples/060000/M1.mp3) | [M2](docs/samples/060000/M2.mp3) |
+| 70,000 | [F1](docs/samples/070000/F1.mp3) | [F2](docs/samples/070000/F2.mp3) | [M1](docs/samples/070000/M1.mp3) | [M2](docs/samples/070000/M2.mp3) |
+| 80,000 | [F1](docs/samples/080000/F1.mp3) | [F2](docs/samples/080000/F2.mp3) | [M1](docs/samples/080000/M1.mp3) | [M2](docs/samples/080000/M2.mp3) |
+| 90,000 | [F1](docs/samples/090000/F1.mp3) | [F2](docs/samples/090000/F2.mp3) | [M1](docs/samples/090000/M1.mp3) | [M2](docs/samples/090000/M2.mp3) |
+| 100,000 | [F1](docs/samples/100000/F1.mp3) | [F2](docs/samples/100000/F2.mp3) | [M1](docs/samples/100000/M1.mp3) | [M2](docs/samples/100000/M2.mp3) |
+| 104,000 (final) | [F1](docs/samples/final/F1.mp3) | [F2](docs/samples/final/F2.mp3) | [M1](docs/samples/final/M1.mp3) | [M2](docs/samples/final/M2.mp3) |
 
 `scripts/make_samples.py` makes them from the saved checkpoints
 (`python scripts/make_samples.py --run runs/v1 --output docs/samples`).
+
+### Results of the first run
+
+Speech recognition (faster-whisper `small`) reads the model's speech back with a
+word error rate of 2.6% on 32 sentences it never saw in training (8 per voice),
+and 4.1% on 16 test-split sentences, where the recordings themselves score 2.5%.
+Speed on four CPU threads: 100 to 146 times faster than real time with ONNX
+Runtime (`scripts/check_onnx.py`). The model is 4,534,219 parameters; the ONNX
+file is 21 MB. These come from small samples, so read them as a rough guide.
 
 ## Usage
 
