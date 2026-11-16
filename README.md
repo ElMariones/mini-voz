@@ -139,9 +139,15 @@ example the CC0 sentence files of
 To clone a real voice instead of designing one, see the notes at the top of
 `scripts/design_voice.py`. Only clone a voice you have permission to use.
 
-`design_voice.py` and `generate_audio.py` are adapted to Spanish but have
-**not been run yet**: the Qwen3-TTS models were not downloaded while setting
-this up.
+Notes from running this route on an RTX 4070 Ti SUPER:
+
+- Designed voices speak with seseo ("z" sounds like "s") whatever the
+  description says. The cloning step follows the accent of the reference clip.
+- Four voices and 7,173 sentences took about 10 hours and gave 29 hours of
+  accepted audio. Close other programs that use the GPU first: if its memory
+  fills up, generation runs ten times slower.
+- To pause, create a file named `data/STOP`. Delete it and run the same
+  command again to continue.
 
 ## Training
 
@@ -173,7 +179,9 @@ uv run python -m mini_voz.evaluate --checkpoint runs/v1/inference.pt --annotatio
 ```
 
 - `prepare` computes the spectrogram and pitch of every clip. It runs on the
-  CPU and is slow: the pitch tracker takes a few seconds per clip.
+  CPU and the pitch tracker takes a few seconds per clip, so give the training
+  split most of your cores with `--workers`: 25,000 clips took about an hour
+  and a half on ten.
 - `annotate` finds how long every phoneme lasts with a pretrained recogniser
   (downloaded once, 1.2 GB) and rejects clips whose audio and text do not
   match. Read `annotations/summary.json` before training.
