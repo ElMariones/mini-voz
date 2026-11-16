@@ -194,6 +194,24 @@ To use other voice names or a different number of voices, pass a JSON file
 with the full configuration to every step with `--config`. `config.json` in
 any run folder has the form.
 
+## How it improves while training
+
+The same text, spoken by every saved checkpoint of the first run
+(`runs/v1`, 104,000 steps planned). The text is: "¡Hola! Esto es mini voz, un
+modelo de voz pequeño que funciona en cualquier ordenador. ¿Qué tal suena? El
+tren a Zaragoza sale a las nueve y media, y hoy llueve en Valencia."
+
+| Step | F1 | F2 | M1 | M2 |
+|---|---|---|---|---|
+| 8,000 (before the adversarial phase) | [F1](docs/samples/008000/F1.mp3) | [F2](docs/samples/008000/F2.mp3) | [M1](docs/samples/008000/M1.mp3) | [M2](docs/samples/008000/M2.mp3) |
+| 10,000 | [F1](docs/samples/010000/F1.mp3) | [F2](docs/samples/010000/F2.mp3) | [M1](docs/samples/010000/M1.mp3) | [M2](docs/samples/010000/M2.mp3) |
+| 20,000 | [F1](docs/samples/020000/F1.mp3) | [F2](docs/samples/020000/F2.mp3) | [M1](docs/samples/020000/M1.mp3) | [M2](docs/samples/020000/M2.mp3) |
+| 30,000 | [F1](docs/samples/030000/F1.mp3) | [F2](docs/samples/030000/F2.mp3) | [M1](docs/samples/030000/M1.mp3) | [M2](docs/samples/030000/M2.mp3) |
+| 40,000 | [F1](docs/samples/040000/F1.mp3) | [F2](docs/samples/040000/F2.mp3) | [M1](docs/samples/040000/M1.mp3) | [M2](docs/samples/040000/M2.mp3) |
+
+`scripts/make_samples.py` makes them from the saved checkpoints
+(`python scripts/make_samples.py --run runs/v1 --output docs/samples`).
+
 ## Usage
 
 ```bash
