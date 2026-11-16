@@ -31,7 +31,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--voice", required=True, help="Voice name, for example F1 or M1")
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--describe", help="The voice in words (Spanish or English)")
+    parser.add_argument("--describe", nargs="+", help="The voice in words (Spanish or English). Several descriptions: "
+                        "the candidates take them in turn, and descriptions.json records which one made each")
     parser.add_argument("--text", default=TEXT, help="What the reference clip says")
     parser.add_argument("--candidates", type=int, default=4)
     parser.add_argument("--seed", type=int, default=1)
@@ -55,12 +56,18 @@ def main():
     import torch
     from qwen_tts import Qwen3TTSModel
     model = Qwen3TTSModel.from_pretrained(MODEL, device_map="cuda:0", dtype=torch.bfloat16, attn_implementation="sdpa")
+    used = {}
     for number in range(1, args.candidates + 1):
+        describe = args.describe[(number - 1) % len(args.describe)]
+        used[f"{args.voice}-{number}.wav"] = describe
         torch.manual_seed(args.seed + number)
-        waves, rate = model.generate_voice_design(text=args.text, instruct=args.describe, language="Spanish")
+        waves, rate = model.generate_voice_design(text=args.text, instruct=describe, language="Spanish")
         path = args.output / f"{args.voice}-{number}.wav"
         sf.write(path, waves[0], rate)
         print(path)
+    notes = args.output / "descriptions.json"
+    known = json.loads(notes.read_text(encoding="utf-8")) if notes.exists() else {}
+    notes.write_text(json.dumps({**known, **used}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
     print(f"Listen to them, then: python scripts/design_voice.py --voice {args.voice} --output {args.output} --choose N")
 
 
