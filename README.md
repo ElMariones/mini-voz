@@ -149,7 +149,7 @@ Both routes leave `data/train.jsonl`, `data/validation.jsonl` and
 `data/test.jsonl`. From there:
 
 ```bash
-uv run python -m mini_voz.prepare --inputs data/train.jsonl --split train --output features
+uv run python -m mini_voz.prepare --inputs data/train.jsonl --split train --output features --workers 12
 ```
 
 ```bash
