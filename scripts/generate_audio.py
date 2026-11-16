@@ -41,6 +41,7 @@ def main():
     parser.add_argument("--voices", type=Path, required=True, help="voices.json: reference clip and its text for every voice")
     parser.add_argument("--deadline-file", type=Path)
     parser.add_argument("--deadline-margin", type=float, default=600)
+    parser.add_argument("--memory-fraction", type=float, default=0.8, help="Share of the GPU memory this job may use")
     parser.add_argument("--limit", type=int, help="Only the first N scripts (smoke test)")
     parser.add_argument("--seed", type=int, default=20261114)
     args = parser.parse_args()
@@ -83,6 +84,10 @@ def main():
         print(json.dumps(value), flush=True)
 
     torch.set_num_threads(6)
+    # Never grow past the GPU's own memory: on Windows the driver would silently spill
+    # into system RAM and generation becomes ten times slower. Past the cap PyTorch
+    # raises an out-of-memory error instead, and the batch is split (see generate()).
+    torch.cuda.set_per_process_memory_fraction(args.memory_fraction)
     model = Qwen3TTSModel.from_pretrained(MODEL, device_map="cuda:0", dtype=torch.bfloat16, attn_implementation="sdpa")
     prompts = {v: model.create_voice_clone_prompt(ref_audio=str(args.voices.parent / references[v]["audio"]), ref_text=references[v]["text"],
                                                   x_vector_only_mode=False)[0] for v in references}
@@ -147,6 +152,7 @@ def main():
             generate(batch[middle:], attempt, batch_id + 50000)
             return
         futures.append(pool.submit(analyze, batch, waves, rate, attempt, seed, batch_id, round(time.time() - start, 3)))
+        torch.cuda.empty_cache()
         if len(futures) >= 2:
             collect(futures.pop(0))
 
