@@ -1,4 +1,4 @@
-import { Mascot } from "./mascot.js";
+import { Mascot, creatureIcon } from "./mascot.js";
 import { Player } from "./player.js";
 
 const $ = (id) => document.getElementById(id);
@@ -32,7 +32,9 @@ const clock = (seconds) => `${Math.floor(seconds / 60)}:${String(Math.floor(seco
 const player = new Player();
 let ready = false, busy = false, request = 0, spoken = "", voice = 0, sample = null, waveDirty = true, peaks = null, peaksFor = -1;
 
+const savedVoice = Math.min(3, Math.max(0, Number(store.get("voice")) || 0));
 const mascot = new Mascot($("voz"), {
+  voice: savedVoice,
   onPoke() {
     if (ready && !busy && !player.playing && !sample) generate(GREETINGS[Math.floor(Math.random() * GREETINGS.length)], true);
   },
@@ -174,6 +176,7 @@ function chooseVoice(index, focus = false) {
     key.tabIndex = at === index ? 0 : -1;
   });
   if (focus) keys[index].focus();
+  mascot.voice(index);
   store.set("voice", index);
   refreshButton();
 }
@@ -184,7 +187,8 @@ keys.forEach((key, index) => {
     if (move) { event.preventDefault(); chooseVoice((index + move + keys.length) % keys.length, true); }
   });
 });
-chooseVoice(Math.min(3, Math.max(0, Number(store.get("voice")) || 0)));
+keys.forEach((key, index) => key.insertAdjacentHTML("afterbegin", creatureIcon(index)));
+chooseVoice(savedVoice);
 
 function showSpeed() {
   speedValue.textContent = `${decimal(Number(speed.value), 2)}×`;
