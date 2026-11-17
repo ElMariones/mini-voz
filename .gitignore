@@ -22,3 +22,7 @@ grabaciones/
 frases/
 onnx-check/
 *.log
+
+# The published model is kept
+!models/*
+!site/model/*

@@ -114,29 +114,8 @@ EXPANSIONS = (("EE. UU.", "Estados Unidos"), ("EE.UU.", "Estados Unidos"), ("EE 
               ("p. ej.", "por ejemplo"), ("a. m.", "de la mañana"), ("p. m.", "de la tarde"))
 
 
-# Written forms eSpeak would spell out letter by letter.
-EXPANSIONS = (("EE. UU.", "Estados Unidos"), ("EE.UU.", "Estados Unidos"), ("EE UU", "Estados Unidos"),
-              ("p. ej.", "por ejemplo"), ("a. m.", "de la mañana"), ("p. m.", "de la tarde"))
-
-
-# Written forms eSpeak would spell out letter by letter.
-EXPANSIONS = (("EE. UU.", "Estados Unidos"), ("EE.UU.", "Estados Unidos"), ("EE UU", "Estados Unidos"),
-              ("p. ej.", "por ejemplo"), ("a. m.", "de la mañana"), ("p. m.", "de la tarde"))
-
-
-# Written forms eSpeak would spell out letter by letter.
-EXPANSIONS = (("EE. UU.", "Estados Unidos"), ("EE.UU.", "Estados Unidos"), ("EE UU", "Estados Unidos"),
-              ("p. ej.", "por ejemplo"), ("a. m.", "de la mañana"), ("p. m.", "de la tarde"))
-
-
 def normalize_text(text):
     text = unicodedata.normalize("NFKC", text).translate(_QUOTES)
-    for written, spoken in EXPANSIONS:
-        text = text.replace(written, spoken)
-    for written, spoken in EXPANSIONS:
-        text = text.replace(written, spoken)
-    for written, spoken in EXPANSIONS:
-        text = text.replace(written, spoken)
     for written, spoken in EXPANSIONS:
         text = text.replace(written, spoken)
     text = re.sub(r"\.{3,}", "…", text)

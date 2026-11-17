@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="es" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>mini voz — texto a voz en tu navegador</title>
+  <meta name="description" content="Un modelo de voz en español de 4,5 millones de parámetros que funciona entero en tu navegador. Escribe algo y lo dice.">
+  <meta name="theme-color" content="#f6f8f7">
+  <meta property="og:title" content="mini voz">
+  <meta property="og:description" content="Texto a voz en español, pequeño y rápido, dentro de tu navegador.">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+  <script>
+    // Before the first paint: the saved theme, or the system's.
+    (function () {
+      var saved = null;
+      try { saved = localStorage.getItem("mini-voz-theme"); } catch (error) {}
+      var dark = saved ? saved === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+      document.documentElement.dataset.theme = dark ? "dark" : "light";
+    })();
+  </script>
+</head>
+<body>
+  <a class="skip" href="#texto">ir al texto</a>
+
+  <header class="nav">
+    <a class="brand" href="#" aria-label="mini voz, inicio">
+      <img class="brand-mark" src="favicon.svg" alt="" width="26" height="26">
+      <span>mini voz</span>
+    </a>
+    <nav class="nav-items" aria-label="secciones">
+      <a class="nav-item wide" href="#muestras">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2.5 14v-3M6.25 14V6M10 14V3M13.75 14V8M17.5 14v-4M1 17.5h18"/></svg>
+        <span>muestras</span>
+      </a>
+      <a class="nav-item wide" href="#modelo">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3.5 3.5h13v13h-13zM7.5 7.5h5v5h-5zM7.5 1v2.5M12.5 1v2.5M7.5 16.5V19M12.5 16.5V19M1 7.5h2.5M1 12.5h2.5M16.5 7.5H19M16.5 12.5H19"/></svg>
+        <span>modelo</span>
+      </a>
+      <a class="nav-item" href="https://github.com/ElMariones/mini-voz" target="_blank" rel="noopener">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M7 2 2 10l5 8M13 2l5 8-5 8"/></svg>
+        <span>código</span>
+      </a>
+      <button class="nav-item" id="theme" type="button" aria-label="cambiar entre día y noche">
+        <svg viewBox="0 0 20 20" aria-hidden="true" class="theme-icon">
+          <path class="sun" d="M6.5 6.5h7v7h-7zM10 1v3M10 16v3M1 10h3M16 10h3M3.6 3.6l2.1 2.1M14.3 14.3l2.1 2.1M3.6 16.4l2.1-2.1M14.3 5.7l2.1-2.1"/>
+          <path class="moon" d="M15.5 12.5A7 7 0 0 1 7.5 4.5 7 7 0 1 0 15.5 12.5z"/>
+        </svg>
+        <span id="theme-label">noche</span>
+      </button>
+    </nav>
+  </header>
+
+  <main>
+    <section class="stage" aria-label="demostración">
+      <div class="vitrine">
+        <div class="load-line" id="load-line" aria-hidden="true"></div>
+        <p class="plate top" id="status" role="status" aria-live="polite">despertando</p>
+        <div class="voz-host" id="voz"></div>
+        <p class="plate bottom">voz mv-1 <span>·</span> 4,5 m de parámetros <span>·</span> 21 mb <span>·</span> 24 khz</p>
+      </div>
+
+      <div class="desk">
+        <h1 class="title"><span class="line"><span>escribe algo.</span></span> <span class="line"><span>yo lo digo.</span></span></h1>
+
+        <div class="field">
+          <textarea id="texto" rows="4" maxlength="3000" spellcheck="false" autocomplete="off"
+            aria-label="texto para leer en voz alta" placeholder="¡Hola! Soy una voz pequeña que vive en tu navegador."></textarea>
+          <div class="field-foot">
+            <div class="examples" aria-label="ejemplos">
+              <span class="quiet">prueba</span>
+              <button type="button" data-example="0">un saludo</button>
+              <button type="button" data-example="1">un trabalenguas</button>
+              <button type="button" data-example="2">el tiempo</button>
+              <button type="button" data-example="3">un poema</button>
+            </div>
+            <span class="quiet count" id="count">0 / 3000</span>
+          </div>
+        </div>
+
+        <div class="row" role="radiogroup" aria-label="voz" id="voices">
+          <button type="button" role="radio" aria-checked="true" class="key" data-voice="0"><b>f1</b><span>mujer</span></button>
+          <button type="button" role="radio" aria-checked="false" class="key" data-voice="1"><b>f2</b><span>mujer</span></button>
+          <button type="button" role="radio" aria-checked="false" class="key" data-voice="2"><b>m1</b><span>hombre</span></button>
+          <button type="button" role="radio" aria-checked="false" class="key" data-voice="3"><b>m2</b><span>hombre</span></button>
+        </div>
+
+        <div class="row speed">
+          <label for="speed">velocidad</label>
+          <input id="speed" type="range" min="0.7" max="1.4" step="0.05" value="1">
+          <output id="speed-value" for="speed">1,00×</output>
+        </div>
+
+        <div class="row actions">
+          <button class="go" id="go" type="button" disabled>
+            <span class="go-label" id="go-label">cargando</span>
+            <span class="go-key" aria-hidden="true">ctrl ⏎</span>
+          </button>
+          <div class="wave" id="wave" role="slider" tabindex="0" aria-label="posición del audio" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
+            <canvas id="wave-canvas"></canvas>
+            <span class="wave-empty" id="wave-empty">el audio aparece aquí</span>
+          </div>
+          <div class="meta">
+            <span id="time">0:00 / 0:00</span>
+            <a id="download" class="link" href="#" download="mini-voz.wav" hidden>descargar wav</a>
+            <span id="speedup" class="quiet"></span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="band" id="muestras">
+      <div class="band-head">
+        <h2>cómo aprende</h2>
+        <p>la misma frase, dicha por el modelo a lo largo de su entrenamiento: de un murmullo a los 8.000 pasos a la voz final a los 104.000. pulsa una casilla para oírla.</p>
+        <p class="quiet said">«¡Hola! Esto es mini voz, un modelo de voz pequeño que funciona en cualquier ordenador. ¿Qué tal suena? El tren a Zaragoza sale a las nueve y media, y hoy llueve en Valencia.»</p>
+      </div>
+      <div class="matrix" id="matrix" role="grid" aria-label="muestras por paso de entrenamiento y voz"></div>
+    </section>
+
+    <section class="band" id="modelo">
+      <div class="band-head">
+        <h2>el modelo</h2>
+        <p>mini voz es un modelo de texto a voz en español entrenado desde cero. es una adaptación de <a class="link" href="https://github.com/n4ze3m/tiny-voca" target="_blank" rel="noopener">tiny-voca</a>, de Muhammed Nazeem.</p>
+      </div>
+      <div class="specs">
+        <div class="spec"><b>4,5 m</b><span>de parámetros. el archivo pesa 21 mb, menos que una canción sin comprimir.</span></div>
+        <div class="spec"><b>100×</b><span>más rápido que el tiempo real en un procesador normal, sin tarjeta gráfica.</span></div>
+        <div class="spec"><b>4</b><span>voces, dos de mujer y dos de hombre, a 24 khz.</span></div>
+        <div class="spec"><b>0</b><span>datos enviados. el texto se convierte en voz dentro de tu navegador.</span></div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <span>mini voz</span>
+    <a href="https://github.com/ElMariones/mini-voz" target="_blank" rel="noopener">github</a>
+    <a href="https://github.com/n4ze3m/tiny-voca" target="_blank" rel="noopener">tiny-voca</a>
+    <a href="vendor/COPYING" target="_blank" rel="noopener">pronunciación: espeak ng (gpl-3.0)</a>
+    <span class="quiet">apache-2.0</span>
+  </footer>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

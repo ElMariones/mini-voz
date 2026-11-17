@@ -1,6 +1,6 @@
 """Speak the same text with every saved checkpoint of a run, to hear the model improve.
 
-    python scripts/make_samples.py --run runs/v1 --output docs/samples
+    python scripts/make_samples.py --run runs/v1 --output site/samples
 
 For each ``step-*.pt`` (and ``inference.pt`` as "final") it writes
 ``<output>/<step>/<voice>.mp3`` for every voice. Existing files are kept, so it
@@ -42,7 +42,7 @@ def load(path):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--run", type=Path, required=True, help="Training output folder, for example runs/v1")
-    parser.add_argument("--output", type=Path, default=Path("docs/samples"))
+    parser.add_argument("--output", type=Path, default=Path("site/samples"))
     parser.add_argument("--text", default=TEXT)
     parser.add_argument("--final", action="store_true", help="Also speak inference.pt, named 'final'")
     args = parser.parse_args()
