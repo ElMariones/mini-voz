@@ -114,10 +114,72 @@ EXPANSIONS = (("EE. UU.", "Estados Unidos"), ("EE.UU.", "Estados Unidos"), ("EE 
               ("p. ej.", "por ejemplo"), ("a. m.", "de la mañana"), ("p. m.", "de la tarde"))
 
 
+MONTHS = ("enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre",
+          "noviembre", "diciembre")
+ORDINALS = ("primero", "segundo", "tercero", "cuarto", "quinto", "sexto", "séptimo", "octavo", "noveno", "décimo")
+# Names that take a feminine ordinal ("Isabel II" -> "Isabel segunda").
+FEMININE_NAMES = {"isabel", "juana", "maría", "catalina", "victoria", "leonor", "urraca", "cristina", "margarita",
+                  "beatriz", "berenguela", "blanca", "ana", "sofía"}
+# Currency signs eSpeak reads in the singular or not at all: (sign, one, many, one cent, many cents).
+CURRENCIES = (("€", "euro", "euros", "céntimo", "céntimos"), ("$", "dólar", "dólares", "centavo", "centavos"))
+_LETTER = "A-Za-zÁÉÍÓÚÜÑáéíóúüñ"
+_DATE = re.compile(r"(?<![\d/-])(\d{1,2})([/-])(\d{1,2})\2(\d{4}|\d{2})(?![\d/-])")
+_AMOUNT = r"(\d{1,3}(?:\.\d{3})+|\d+)(?:,(\d{1,2}))?"
+_ROMAN = re.compile(f"(?<![{_LETTER}])([A-ZÁÉÍÓÚÑ][a-záéíóúüñ]+) ([IVX]{{1,6}})(?![{_LETTER}])")
+_ROMAN_VALID = re.compile(r"(X{0,3})(IX|IV|V?I{0,3})")
+_ROMAN_VALUES = {"I": 1, "V": 5, "X": 10}
+
+
+def _date(match):
+    """'16/11/2026' -> '16 de noviembre de 2026'. Anything that is not a valid date is left as it is."""
+    day, month, year = int(match[1]), int(match[3]), match[4]
+    if not (1 <= day <= 31 and 1 <= month <= 12):
+        return match[0]
+    if len(year) == 2:
+        year = ("20" if int(year) < 50 else "19") + year
+    return f"{day} de {MONTHS[month - 1]} de {int(year)}"
+
+
+def _money(whole, cents, names):
+    one, many, cent, cents_name = names
+    unit = f"un {one}" if whole == "1" else f"{whole} {many}"
+    value = int(cents.ljust(2, "0")) if cents else 0
+    if not value:
+        return unit
+    return f"{unit} con " + (f"un {cent}" if value == 1 else f"{value} {cents_name}")
+
+
+def _roman(match):
+    """'Felipe VI' -> 'Felipe sexto', 'Siglo XXI' -> 'Siglo 21' (ordinals up to ten, numbers after)."""
+    name, numeral = match[1], match[2]
+    if not _ROMAN_VALID.fullmatch(numeral):
+        return match[0]
+    values = [_ROMAN_VALUES[c] for c in numeral]
+    value = sum(-v if i + 1 < len(values) and v < values[i + 1] else v for i, v in enumerate(values))
+    if value > 10:
+        return f"{name} {value}"
+    word = ORDINALS[value - 1]
+    if name.lower() in FEMININE_NAMES:
+        word = word[:-1] + "a"
+    return f"{name} {word}"
+
+
+def spell_out(text):
+    """Write out what eSpeak would read wrongly: dates with slashes or dashes, amounts with a currency sign,
+    and Roman numerals after a name. src/mini_voz/text.py and site/tts/frontend.js must do the same."""
+    text = _DATE.sub(_date, text)
+    for sign, *names in CURRENCIES:
+        escaped = re.escape(sign)
+        text = re.sub(_AMOUNT + rf"\s?{escaped}", lambda m: _money(m[1], m[2], names), text)
+        text = re.sub(rf"{escaped}\s?" + _AMOUNT, lambda m: _money(m[1], m[2], names), text)
+    return _ROMAN.sub(_roman, text)
+
+
 def normalize_text(text):
     text = unicodedata.normalize("NFKC", text).translate(_QUOTES)
     for written, spoken in EXPANSIONS:
         text = text.replace(written, spoken)
+    text = spell_out(text)
     text = re.sub(r"\.{3,}", "…", text)
     text = re.sub(r"-{2,}|\s-\s", "—", text)
     return re.sub(r"\s+", " ", text).strip()

@@ -32,6 +32,14 @@ class FrontEndTests(unittest.TestCase):
         # A dot between letters is a mark, not something to spell out as "punto".
         self.assertEqual([p for punctuation, p in chunks("a.b") if punctuation], ["."])
 
+    def test_dates_money_and_roman_numerals_are_written_out(self):
+        self.assertEqual(normalize_text("El 16/11/2026 y el 05-03-99."), "El 16 de noviembre de 2026 y el 5 de marzo de 1999.")
+        self.assertEqual(normalize_text("1/2 y 32/13/2020"), "1/2 y 32/13/2020")
+        self.assertEqual(normalize_text("Cuesta 19,99 €, 1 € o €1.250,50."),
+                         "Cuesta 19 euros con 99 céntimos, un euro o 1.250 euros con 50 céntimos.")
+        self.assertEqual(normalize_text("Felipe VI, Isabel II y Alfonso XIII"), "Felipe sexto, Isabel segunda y Alfonso 13")
+        self.assertEqual(normalize_text("el siglo XXI"), "el siglo XXI")
+
     def test_separated_espeak_output_becomes_phones_with_stress_features(self):
         words = parse_espeak("ˈo_l_a m_ˈu_n_d_o\nθ_ˌe_n e_s__\n")
         self.assertEqual(words[0], [("o", 1), ("l", 0), ("a", 0)])

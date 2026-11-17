@@ -37,9 +37,57 @@ const isDigit = (char) => /\p{Nd}/u.test(char);
 
 export class NothingToPronounce extends Error {}
 
+const MONTHS = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre",
+  "noviembre", "diciembre"];
+const ORDINALS = ["primero", "segundo", "tercero", "cuarto", "quinto", "sexto", "séptimo", "octavo", "noveno", "décimo"];
+// Names that take a feminine ordinal ("Isabel II" -> "Isabel segunda").
+const FEMININE_NAMES = new Set(["isabel", "juana", "maría", "catalina", "victoria", "leonor", "urraca", "cristina", "margarita",
+  "beatriz", "berenguela", "blanca", "ana", "sofía"]);
+// Currency signs eSpeak reads in the singular or not at all: [sign, one, many, one cent, many cents].
+const CURRENCIES = [["€", "euro", "euros", "céntimo", "céntimos"], ["$", "dólar", "dólares", "centavo", "centavos"]];
+const LETTER = "A-Za-zÁÉÍÓÚÜÑáéíóúüñ";
+const DATE = /(?<![\d/-])(\d{1,2})([/-])(\d{1,2})\2(\d{4}|\d{2})(?![\d/-])/g;
+const AMOUNT = String.raw`(\d{1,3}(?:\.\d{3})+|\d+)(?:,(\d{1,2}))?`;
+const ROMAN = new RegExp(`(?<![${LETTER}])([A-ZÁÉÍÓÚÑ][a-záéíóúüñ]+) ([IVX]{1,6})(?![${LETTER}])`, "gu");
+const ROMAN_VALID = /^(X{0,3})(IX|IV|V?I{0,3})$/;
+const ROMAN_VALUES = { I: 1, V: 5, X: 10 };
+
+function money(whole, cents, [one, many, cent, centsName]) {
+  const unit = whole === "1" ? `un ${one}` : `${whole} ${many}`;
+  const value = cents ? Number(cents.padEnd(2, "0")) : 0;
+  if (!value) return unit;
+  return `${unit} con ` + (value === 1 ? `un ${cent}` : `${value} ${centsName}`);
+}
+
+// Write out what eSpeak would read wrongly: dates with slashes or dashes, amounts
+// with a currency sign, and Roman numerals after a name. Same as spell_out in text.py.
+export function spellOut(text) {
+  text = text.replace(DATE, (all, d, sep, m, y) => {
+    const day = Number(d), month = Number(m);
+    if (!(day >= 1 && day <= 31 && month >= 1 && month <= 12)) return all;
+    const year = y.length === 2 ? (Number(y) < 50 ? "20" : "19") + y : y;
+    return `${day} de ${MONTHS[month - 1]} de ${Number(year)}`;
+  });
+  for (const [sign, ...names] of CURRENCIES) {
+    const escaped = sign.replace(/[$]/g, String.raw`\$`);
+    text = text.replace(new RegExp(AMOUNT + String.raw`\s?` + escaped, "g"), (all, whole, cents) => money(whole, cents, names));
+    text = text.replace(new RegExp(escaped + String.raw`\s?` + AMOUNT, "g"), (all, whole, cents) => money(whole, cents, names));
+  }
+  return text.replace(ROMAN, (all, name, numeral) => {
+    if (!ROMAN_VALID.test(numeral)) return all;
+    const values = [...numeral].map((c) => ROMAN_VALUES[c]);
+    const value = values.reduce((sum, v, i) => sum + (i + 1 < values.length && v < values[i + 1] ? -v : v), 0);
+    if (value > 10) return `${name} ${value}`;
+    let word = ORDINALS[value - 1];
+    if (FEMININE_NAMES.has(name.toLowerCase())) word = word.slice(0, -1) + "a";
+    return `${name} ${word}`;
+  });
+}
+
 export function normalizeText(text) {
   text = text.normalize("NFKC").replace(/[‘’‚‛`´“”„‟«»–―[\]{}]/g, (char) => QUOTES[char]);
   for (const [written, spoken] of EXPANSIONS) text = text.split(written).join(spoken);
+  text = spellOut(text);
   text = text.replace(/\.{3,}/g, "…").replace(/-{2,}|\s-\s/g, "—");
   return text.replace(/\s+/g, " ").trim();
 }

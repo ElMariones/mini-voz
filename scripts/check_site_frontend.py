@@ -26,6 +26,8 @@ HARD = [
     "Ñandú, pingüino, cigüeña y güisqui.", "D. Juan vive en la Av. de América (Madrid).", "L'Hospitalet d'Or y O'Donnell",
     "El 50% de 3,5 km son 1.75 km.", "Texto [entre corchetes] y {llaves}.", "Primera frase. segunda sin mayúscula. Tercera, sí; cuarta: no",
     "WhatsApp, YouTube, Wi-Fi y Bluetooth", "Año 1999, siglo XXI, 3º piso, 2ª planta", "pero ¿por qué? —preguntó",
+    "El 16/11/2026 y el 05-03-99, pero no 1/2 ni 32/13/2020.", "Cuesta 19,99 €, 1 €, 1,01 € o €1.250,50.",
+    "Vale 20$ o $3,5.", "Felipe VI, Isabel II, Siglo XXI, Alfonso XIII, Juan Pablo II y Capítulo IV.", "MAYÚSCULAS VI y Rocky II",
 ]
 
 
