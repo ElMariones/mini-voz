@@ -4,6 +4,8 @@ A small Spanish text-to-speech model: 4.5M parameters, 21 MB, four voices,
 24 kHz. It runs over 100 times faster than real time on a CPU, and entirely
 inside a web browser.
 
+**Demo: [mini-voz.vercel.app](https://mini-voz.vercel.app)**
+
 mini-voz is a Spanish adaptation of
 [tiny-voca](https://github.com/n4ze3m/tiny-voca) by Muhammed Nazeem. It keeps
 tiny-voca's model and training recipe and replaces the English text front end
@@ -11,17 +13,15 @@ with a Spanish one.
 
 ## Try it
 
-**In the browser.** The demo in [`site/`](site) speaks whatever you type,
-without sending the text anywhere. It also plays the same sentence at each
-stage of training, from 8,000 to 104,000 steps, so you can hear the model
-learn. To run it locally:
+**In the browser: [mini-voz.vercel.app](https://mini-voz.vercel.app).** The
+demo speaks whatever you type, without sending the text anywhere. It also plays
+the same sentence at each stage of training, from 8,000 to 104,000 steps, so
+you can hear the model learn. Its code is in [`site/`](site); to run it
+locally:
 
 ```bash
 node scripts/serve_site.mjs
 ```
-
-To publish it, import this repository in Vercel. [`vercel.json`](vercel.json)
-already points it at `site/`; there is no build step.
 
 **From Python.** You need [uv](https://docs.astral.sh/uv/) and
 [eSpeak NG](https://github.com/espeak-ng/espeak-ng).
