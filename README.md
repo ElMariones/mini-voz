@@ -8,8 +8,9 @@ by Muhammed Nazeem: same model and training recipe, a Spanish text front end,
 and a pipeline that runs on Windows, macOS and Linux.
 
 **Status: a first model is trained** (104,000 steps, four synthetic voices, 27
-hours of audio, about 8 hours on an RTX 4070 Ti SUPER). The weights are not
-published in this repository yet; train your own with the steps below.
+hours of audio, about 8 hours on an RTX 4070 Ti SUPER). The weights are in
+[`models/`](models) (`mini-voz.pt` for PyTorch, `mini-voz.onnx` for ONNX
+Runtime), and you can train your own with the steps below.
 Figures marked "tiny-voca" are those of the original English model, which has
 the same architecture.
 
