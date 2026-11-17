@@ -18,9 +18,28 @@ export class Player extends EventTarget {
       this.analyser.smoothingTimeConstant = 0.6;
       this.analyser.connect(this.ctx.destination);
       this.spectrum = new Uint8Array(this.analyser.frequencyBinCount);
+      // iPhones treat Web Audio as a ringtone: silent with the mute switch on, and
+      // sometimes silent until an <audio> element has played. Declare this page a
+      // media player where the browser lets us...
+      try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch { /* not supported */ }
+      // ...and keep a silent <audio> element running while we play, which moves
+      // the whole page to the media channel on older versions.
+      this.silence = new Audio(URL.createObjectURL(silentWav()));
+      this.silence.loop = true;
+      this.silence.setAttribute("playsinline", "");
     }
-    if (this.ctx.state === "suspended") this.ctx.resume();
+    if (this.ctx.state !== "running") this.ctx.resume();
+    // A sound started inside the tap is what unlocks the context on iOS.
+    const tick = this.ctx.createBufferSource();
+    tick.buffer = this.ctx.createBuffer(1, 1, this.rate);
+    tick.connect(this.ctx.destination);
+    tick.start();
+    this.silence.play().catch(() => {});
     return this.ctx;
+  }
+
+  rest() {
+    if (this.silence) this.silence.pause();
   }
 
   reset() {
@@ -105,6 +124,7 @@ export class Player extends EventTarget {
     this.offset = Math.round(this.position * this.rate);
     this.playing = false;
     this.stopSources();
+    this.rest();
     this.dispatchEvent(new Event("state"));
   }
 
@@ -114,6 +134,7 @@ export class Player extends EventTarget {
       this.playing = false;
       this.offset = this.length;
       this.stopSources();
+      this.rest();
       this.dispatchEvent(new Event("state"));
       this.dispatchEvent(new Event("ended"));
     }
@@ -143,4 +164,18 @@ export class Player extends EventTarget {
     }
     return new Blob([view], { type: "audio/wav" });
   }
+}
+
+// A fifth of a second of silence, as a WAV file.
+function silentWav() {
+  const rate = 8000, count = rate / 5;
+  const view = new DataView(new ArrayBuffer(44 + count));
+  const text = (at, value) => { for (let i = 0; i < value.length; i++) view.setUint8(at + i, value.charCodeAt(i)); };
+  text(0, "RIFF"); view.setUint32(4, 36 + count, true); text(8, "WAVEfmt ");
+  view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+  view.setUint32(24, rate, true); view.setUint32(28, rate, true);
+  view.setUint16(32, 1, true); view.setUint16(34, 8, true); text(36, "data");
+  view.setUint32(40, count, true);
+  for (let i = 0; i < count; i++) view.setUint8(44 + i, 128);       // 8-bit silence is 128
+  return new Blob([view], { type: "audio/wav" });
 }

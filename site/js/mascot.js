@@ -64,7 +64,8 @@ export class Mascot {
     this.calm = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     window.addEventListener("pointermove", (event) => this.follow(event.clientX, event.clientY), { passive: true });
     window.addEventListener("pointerdown", (event) => this.follow(event.clientX, event.clientY), { passive: true });
-    this.svg.addEventListener("pointerdown", () => {
+    // "click", not "pointerdown": phones only allow sound to start from a finished tap.
+    this.svg.addEventListener("click", () => {
       this.poke = 1;
       this.blink = 1;
       if (onPoke) onPoke();

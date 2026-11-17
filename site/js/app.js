@@ -298,6 +298,7 @@ function stopSample() {
   sample.classList.remove("on");
   sample.style.removeProperty("--played");
   sample = null;
+  if (!player.playing) player.rest();
 }
 
 matrix.addEventListener("click", (event) => {
